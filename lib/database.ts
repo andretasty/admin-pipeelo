@@ -21,9 +21,9 @@ function dbRowToClient(row: any): Client {
       name: row.tenant_name,
       document: row.tenant_document,
       phone_number: row.tenant_phone,
-      email: row.tenant_email || row.admin_email,
-      website: row.tenant_website,
-      sector: row.tenant_sector || "Geral",
+      email: row.company_email || row.admin_email,
+      website: row.company_website,
+      sector: row.company_sector || "Geral",
       address: {
         street: row.address_street,
         number: row.address_number,
@@ -54,7 +54,7 @@ function dbRowToClient(row: any): Client {
           fields: row.erp_config?.fields || {},
           enabled_commands: row.erp_config?.enabled_commands || [],
           connection_status: row.erp_status || "pending",
-          last_tested: row.erp_config?.last_tested,
+          last_tested: row.erp_last_test,
         }
       : undefined,
     prompt_config: row.prompt_template_id
@@ -62,7 +62,7 @@ function dbRowToClient(row: any): Client {
           template_id: row.prompt_template_id,
           template_name: row.prompt_template_name,
           final_content: row.prompt_final_content || "",
-          assistant_config: row.assistant_config || {
+          assistant_config: row.prompt_config?.assistant_config || {
             provider: "openai",
             model: "gpt-4",
             temperature: 0.7,
@@ -70,11 +70,11 @@ function dbRowToClient(row: any): Client {
             frequency_penalty: 0,
             response_delay: 0,
           },
-          placeholders_filled: row.prompt_placeholders || {},
+          placeholders_filled: row.prompt_config?.placeholders_filled || {},
         }
       : undefined,
     advanced_config: {
-      categories: row.categories || [],
+      categories: Array.isArray(row.categories) ? row.categories : [],
       full_service_enabled: row.full_service_enabled || false,
       webhooks: row.webhooks || [],
       backup_settings: row.backup_settings || {
@@ -101,9 +101,9 @@ async function clientToDbRow(client: Client, isUpdate = false) {
     tenant_name: client.tenant.name,
     tenant_document: client.tenant.document,
     tenant_phone: client.tenant.phone_number,
-    tenant_email: client.tenant.email,
-    tenant_website: client.tenant.website,
-    tenant_sector: client.tenant.sector,
+    company_email: client.tenant.email,
+    company_website: client.tenant.website,
+    company_sector: client.tenant.sector,
     address_street: client.tenant.address.street,
     address_number: client.tenant.address.number,
     address_neighborhood: client.tenant.address.neighborhood,
@@ -125,19 +125,27 @@ async function clientToDbRow(client: Client, isUpdate = false) {
       ? {
           fields: client.erp_config.fields,
           enabled_commands: client.erp_config.enabled_commands,
-          last_tested: client.erp_config.last_tested,
         }
       : null,
     erp_status: client.erp_config?.connection_status,
+    erp_last_test: client.erp_config?.last_tested,
     prompt_template_id: client.prompt_config?.template_id,
     prompt_template_name: client.prompt_config?.template_name,
     prompt_final_content: client.prompt_config?.final_content,
-    prompt_placeholders: client.prompt_config?.placeholders_filled,
-    assistant_config: client.prompt_config?.assistant_config,
-    categories: client.advanced_config?.categories,
-    full_service_enabled: client.advanced_config?.full_service_enabled,
-    webhooks: client.advanced_config?.webhooks,
-    backup_settings: client.advanced_config?.backup_settings,
+    prompt_config: client.prompt_config
+      ? {
+          assistant_config: client.prompt_config.assistant_config,
+          placeholders_filled: client.prompt_config.placeholders_filled,
+        }
+      : null,
+    categories: client.advanced_config?.categories || [],
+    full_service_enabled: client.advanced_config?.full_service_enabled || false,
+    webhooks: client.advanced_config?.webhooks || [],
+    backup_settings: client.advanced_config?.backup_settings || {
+      frequency: "weekly",
+      retention_days: 30,
+      enabled: false,
+    },
     onboarding_status: client.onboarding_status,
     current_step: client.current_step,
     total_steps: client.total_steps,
@@ -165,24 +173,89 @@ async function clientToDbRow(client: Client, isUpdate = false) {
 
 export const saveClient = async (client: Client): Promise<{ success: boolean; error?: string; data?: Client }> => {
   try {
+    console.log("Saving client:", client.id, client.onboarding_status)
+
     // Check if this is an update (valid UUID) or new client
     const isUpdate = isValidUUID(client.id)
 
     if (isUpdate) {
-      // Update existing client
-      const dbRow = await clientToDbRow(client, true)
+      // First check if the client exists
+      const { data: existingClient, error: checkError } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("id", client.id)
+        .maybeSingle()
 
-      const { data, error } = await supabase.from("clients").update(dbRow).eq("id", client.id).select().single()
+      if (checkError) {
+        console.error("Error checking existing client:", checkError)
+        throw checkError
+      }
 
-      if (error) throw error
-      return { success: true, data: dbRowToClient(data) }
+      if (!existingClient) {
+        console.log("Client not found, creating new one instead")
+        // Client doesn't exist, create new one
+        const dbRow = await clientToDbRow(client, false)
+        console.log("Creating new client with data:", dbRow)
+
+        const { data, error } = await supabase.from("clients").insert(dbRow).select().single()
+
+        if (error) {
+          console.error("Supabase insert error:", error)
+          throw error
+        }
+        return { success: true, data: dbRowToClient(data) }
+      } else {
+        // Update existing client
+        const dbRow = await clientToDbRow(client, true)
+        console.log("Updating client with data:", dbRow)
+
+        const { data, error } = await supabase.from("clients").update(dbRow).eq("id", client.id).select().single()
+
+        if (error) {
+          console.error("Supabase update error:", error)
+          throw error
+        }
+        return { success: true, data: dbRowToClient(data) }
+      }
     } else {
       // Create new client with proper UUID
-      const dbRow = await clientToDbRow(client, false)
+      const newId = generateUUID()
+      const clientWithNewId = { ...client, id: newId }
+      const dbRow = await clientToDbRow(clientWithNewId, false)
+      console.log("Creating new client with data:", dbRow)
+
+      // Check if a client with similar data already exists to prevent duplicates
+      const { data: duplicateCheck } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("tenant_document", client.tenant.document)
+        .eq("admin_email", client.admin_user.email)
+        .maybeSingle()
+
+      if (duplicateCheck) {
+        console.log("Duplicate client found, updating instead:", duplicateCheck.id)
+        // Update the existing client instead
+        const updateDbRow = await clientToDbRow({ ...client, id: duplicateCheck.id }, true)
+        const { data, error } = await supabase
+          .from("clients")
+          .update(updateDbRow)
+          .eq("id", duplicateCheck.id)
+          .select()
+          .single()
+
+        if (error) {
+          console.error("Supabase update duplicate error:", error)
+          throw error
+        }
+        return { success: true, data: dbRowToClient(data) }
+      }
 
       const { data, error } = await supabase.from("clients").insert(dbRow).select().single()
 
-      if (error) throw error
+      if (error) {
+        console.error("Supabase insert error:", error)
+        throw error
+      }
       return { success: true, data: dbRowToClient(data) }
     }
   } catch (error: any) {
@@ -208,7 +281,7 @@ export const getClients = async (filters?: {
     }
 
     if (filters?.sector) {
-      query = query.eq("tenant_sector", filters.sector)
+      query = query.eq("company_sector", filters.sector)
     }
 
     if (filters?.search) {
@@ -219,7 +292,7 @@ export const getClients = async (filters?: {
 
     if (error) throw error
 
-    const clients = data.map(dbRowToClient)
+    const clients = data ? data.map(dbRowToClient) : []
     return { success: true, data: clients }
   } catch (error: any) {
     console.error("Error fetching clients:", error)
@@ -232,9 +305,13 @@ export const getClients = async (filters?: {
 
 export const getClient = async (id: string): Promise<{ success: boolean; data?: Client; error?: string }> => {
   try {
-    const { data, error } = await supabase.from("clients").select("*").eq("id", id).single()
+    const { data, error } = await supabase.from("clients").select("*").eq("id", id).maybeSingle()
 
     if (error) throw error
+
+    if (!data) {
+      return { success: false, error: "Cliente não encontrado" }
+    }
 
     const client = dbRowToClient(data)
     return { success: true, data: client }
@@ -268,6 +345,24 @@ export const updateClientStep = async (
   stepData?: any,
 ): Promise<{ success: boolean; error?: string }> => {
   try {
+    console.log("Updating client step:", id, step, stepData)
+
+    // First check if the client exists
+    const { data: existingClient, error: checkError } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("id", id)
+      .maybeSingle()
+
+    if (checkError) {
+      console.error("Error checking client:", checkError)
+      throw checkError
+    }
+
+    if (!existingClient) {
+      throw new Error("Cliente não encontrado")
+    }
+
     const updateData: any = {
       current_step: step,
       updated_at: new Date().toISOString(),
@@ -284,35 +379,71 @@ export const updateClientStep = async (
     if (stepData) {
       switch (step) {
         case 2:
+          // API Config step
           updateData.openai_key = stepData.openai_key
           updateData.openrouter_key = stepData.openrouter_key
           updateData.api_tests = stepData.api_tests
           break
         case 3:
-          updateData.erp_template_id = stepData.template_id
-          updateData.erp_template_name = stepData.template_name
-          updateData.erp_config = stepData.config
-          updateData.erp_status = stepData.status
+          // ERP Config step - ensure template_id is a valid UUID
+          if (stepData.template_id && isValidUUID(stepData.template_id)) {
+            updateData.erp_template_id = stepData.template_id
+            updateData.erp_template_name = stepData.template_name
+            updateData.erp_config = {
+              fields: stepData.fields || {},
+              enabled_commands: stepData.enabled_commands || [],
+            }
+            updateData.erp_status = stepData.connection_status || "pending"
+            updateData.erp_last_test = stepData.last_tested
+          } else {
+            console.warn("Invalid ERP template ID:", stepData.template_id)
+          }
           break
         case 4:
-          updateData.prompt_template_id = stepData.template_id
-          updateData.prompt_template_name = stepData.template_name
-          updateData.prompt_final_content = stepData.final_content
-          updateData.prompt_placeholders = stepData.placeholders_filled
-          updateData.assistant_config = stepData.assistant_config
+          // Prompt Config step - ensure template_id is a valid UUID
+          if (stepData.template_id && isValidUUID(stepData.template_id)) {
+            updateData.prompt_template_id = stepData.template_id
+            updateData.prompt_template_name = stepData.template_name
+            updateData.prompt_final_content = stepData.final_content
+            updateData.prompt_config = {
+              assistant_config: stepData.assistant_config,
+              placeholders_filled: stepData.placeholders_filled,
+            }
+          } else {
+            console.warn("Invalid prompt template ID:", stepData.template_id)
+          }
+          break
+        case 5:
+          // Function Mapping step - updates ERP config
+          updateData.erp_config = {
+            fields: stepData.fields || {},
+            enabled_commands: stepData.enabled_commands || [],
+          }
           break
         case 6:
-          updateData.categories = stepData.categories
-          updateData.full_service_enabled = stepData.full_service_enabled
-          updateData.webhooks = stepData.webhooks
-          updateData.backup_settings = stepData.backup_settings
+          // Advanced Config step
+          updateData.categories = stepData.categories || []
+          updateData.full_service_enabled = stepData.full_service_enabled || false
+          updateData.webhooks = stepData.webhooks || []
+          updateData.backup_settings = stepData.backup_settings || {
+            frequency: "weekly",
+            retention_days: 30,
+            enabled: false,
+          }
           break
       }
     }
 
+    console.log("Update data:", updateData)
+
     const { error } = await supabase.from("clients").update(updateData).eq("id", id)
 
-    if (error) throw error
+    if (error) {
+      console.error("Supabase update step error:", error)
+      throw error
+    }
+
+    console.log("Step updated successfully")
     return { success: true }
   } catch (error: any) {
     console.error("Error updating client step:", error)
@@ -329,15 +460,16 @@ export const getDashboardMetrics = async (): Promise<{ success: boolean; data?: 
 
     if (error) throw error
 
-    const total_clients = data.length
-    const completed_onboardings = data.filter(
+    const clients = data || []
+    const total_clients = clients.length
+    const completed_onboardings = clients.filter(
       (c) => c.onboarding_status === "completed" || c.onboarding_status === "deployed",
     ).length
-    const in_progress = data.filter((c) => c.onboarding_status === "in_progress").length
-    const failed_deployments = data.filter((c) => c.onboarding_status === "failed").length
+    const in_progress = clients.filter((c) => c.onboarding_status === "in_progress").length
+    const failed_deployments = clients.filter((c) => c.onboarding_status === "failed").length
 
     // Calculate average completion time (simplified)
-    const completedClients = data.filter((c) => c.deployed_at)
+    const completedClients = clients.filter((c) => c.deployed_at)
     const average_completion_time =
       completedClients.length > 0
         ? completedClients.reduce((acc, client) => {

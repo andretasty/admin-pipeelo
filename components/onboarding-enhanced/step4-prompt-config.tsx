@@ -1,11 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import type { PromptConfig, Tenant } from "@/types"
-import { PROMPT_TEMPLATES, fillPromptPlaceholders } from "@/lib/prompt-templates"
+import type { PromptConfig, Tenant, PromptTemplate } from "@/types"
+import { getPromptTemplates, fillPromptPlaceholders } from "@/lib/prompt-templates"
 
 interface Step4Props {
   promptConfig?: PromptConfig
@@ -16,10 +18,21 @@ interface Step4Props {
 }
 
 export default function Step4PromptConfig({ promptConfig, tenant, onNext, onBack, saving = false }: Step4Props) {
+  const [templates, setTemplates] = useState<PromptTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState(promptConfig?.template_id || "")
   const [placeholders, setPlaceholders] = useState<Record<string, string>>(promptConfig?.placeholders_filled || {})
+  const [loading, setLoading] = useState(true)
 
-  const template = PROMPT_TEMPLATES.find(t => t.id === selectedTemplate)
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      const fetchedTemplates = await getPromptTemplates()
+      setTemplates(fetchedTemplates)
+      setLoading(false)
+    }
+    fetchTemplates()
+  }, [])
+
+  const template = templates.find((t) => t.id === selectedTemplate)
   const finalContent = template ? fillPromptPlaceholders(template, placeholders) : ""
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -30,16 +43,27 @@ export default function Step4PromptConfig({ promptConfig, tenant, onNext, onBack
         template_name: template.name,
         final_content: finalContent,
         assistant_config: {
-          provider: 'openai',
-          model: 'gpt-4',
+          provider: "openai",
+          model: "gpt-4",
           temperature: 0.7,
           top_p: 1.0,
           frequency_penalty: 0,
-          response_delay: 0
+          response_delay: 0,
         },
-        placeholders_filled: placeholders
+        placeholders_filled: placeholders,
       })
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#01D5AC] mx-auto mb-4"></div>
+          <p style={{ color: "#718096" }}>Carregando templates...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -61,7 +85,7 @@ export default function Step4PromptConfig({ promptConfig, tenant, onNext, onBack
                 <SelectValue placeholder="Selecione o template" />
               </SelectTrigger>
               <SelectContent>
-                {PROMPT_TEMPLATES.map((template) => (
+                {templates.map((template) => (
                   <SelectItem key={template.id} value={template.id}>
                     {template.name}
                   </SelectItem>
@@ -75,13 +99,13 @@ export default function Step4PromptConfig({ promptConfig, tenant, onNext, onBack
               <p className="text-sm" style={{ color: "#718096" }}>
                 {template.description}
               </p>
-              
+
               {template.placeholders.map((placeholder) => (
                 <div key={placeholder}>
-                  <div className="label-small">{placeholder.replace(/_/g, ' ')}</div>
+                  <div className="label-small">{placeholder.replace(/_/g, " ")}</div>
                   <Textarea
                     value={placeholders[placeholder] || ""}
-                    onChange={(e) => setPlaceholders(prev => ({ ...prev, [placeholder]: e.target.value }))}
+                    onChange={(e) => setPlaceholders((prev) => ({ ...prev, [placeholder]: e.target.value }))}
                     placeholder={`Digite o valor para ${placeholder}`}
                     className="min-h-[80px]"
                   />
@@ -102,19 +126,10 @@ export default function Step4PromptConfig({ promptConfig, tenant, onNext, onBack
       </div>
 
       <div className="flex justify-between pt-6">
-        <Button
-          type="button"
-          onClick={onBack}
-          variant="outline"
-          className="h-12 px-6"
-        >
+        <Button type="button" onClick={onBack} variant="outline" className="h-12 px-6">
           Voltar
         </Button>
-        <Button 
-          type="submit" 
-          disabled={!selectedTemplate || saving} 
-          className="btn-primary h-12 px-8"
-        >
+        <Button type="submit" disabled={!selectedTemplate || saving} className="btn-primary h-12 px-8">
           {saving ? "Salvando..." : "Próximo"}
         </Button>
       </div>
