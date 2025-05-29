@@ -13,8 +13,8 @@ async function hashPassword(password: string): Promise<string> {
   return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
 }
 
-// Convert database row to Client object
-function dbRowToClient(row: any): Client {
+// Convert database row to Client object with ERP data from separate table
+function dbRowToClient(row: any, erpData?: any): Client {
   return {
     id: row.id,
     tenant: {
@@ -47,14 +47,14 @@ function dbRowToClient(row: any): Client {
       openrouter_key: row.openrouter_key,
       api_tests: row.api_tests || {},
     },
-    erp_config: row.erp_template_id
+    erp_config: erpData
       ? {
-          template_id: row.erp_template_id,
-          template_name: row.erp_template_name,
-          fields: row.erp_config?.fields || {},
-          enabled_commands: row.erp_config?.enabled_commands || [],
-          connection_status: row.erp_status || "pending",
-          last_tested: row.erp_last_test,
+          template_id: erpData.template_id,
+          template_name: erpData.template_name,
+          fields: erpData.fields || {},
+          enabled_commands: erpData.enabled_commands || [],
+          connection_status: erpData.connection_status || "pending",
+          last_tested: erpData.last_tested,
         }
       : undefined,
     prompt_config: row.prompt_template_id
@@ -119,16 +119,6 @@ async function clientToDbRow(client: Client, isUpdate = false) {
     openai_key: client.api_config.openai_key,
     openrouter_key: client.api_config.openrouter_key,
     api_tests: client.api_config.api_tests,
-    erp_template_id: client.erp_config?.template_id,
-    erp_template_name: client.erp_config?.template_name,
-    erp_config: client.erp_config
-      ? {
-          fields: client.erp_config.fields,
-          enabled_commands: client.erp_config.enabled_commands,
-        }
-      : null,
-    erp_status: client.erp_config?.connection_status,
-    erp_last_test: client.erp_config?.last_tested,
     prompt_template_id: client.prompt_config?.template_id,
     prompt_template_name: client.prompt_config?.template_name,
     prompt_final_content: client.prompt_config?.final_content,
@@ -171,6 +161,66 @@ async function clientToDbRow(client: Client, isUpdate = false) {
   return baseData
 }
 
+// Save or update ERP configuration separately
+async function saveERPConfig(clientId: string, erpConfig: any) {
+  if (!erpConfig || !erpConfig.template_id) return
+
+  try {
+    // Check if ERP config already exists for this client
+    const { data: existingConfig } = await supabase
+      .from("erp_configurations")
+      .select("id")
+      .eq("client_id", clientId)
+      .maybeSingle()
+
+    const erpData = {
+      client_id: clientId,
+      template_id: erpConfig.template_id,
+      template_name: erpConfig.template_name,
+      fields: erpConfig.fields || {},
+      enabled_commands: erpConfig.enabled_commands || [],
+      connection_status: erpConfig.connection_status || "pending",
+      last_tested: erpConfig.last_tested,
+      updated_at: new Date().toISOString(),
+    }
+
+    if (existingConfig) {
+      // Update existing ERP config
+      const { error } = await supabase.from("erp_configurations").update(erpData).eq("client_id", clientId)
+
+      if (error) throw error
+    } else {
+      // Create new ERP config
+      const { error } = await supabase.from("erp_configurations").insert({
+        ...erpData,
+        created_at: new Date().toISOString(),
+      })
+
+      if (error) throw error
+    }
+  } catch (error) {
+    console.error("Error saving ERP config:", error)
+    throw error
+  }
+}
+
+// Get ERP configuration for a client
+async function getERPConfig(clientId: string) {
+  try {
+    const { data, error } = await supabase
+      .from("erp_configurations")
+      .select("*")
+      .eq("client_id", clientId)
+      .maybeSingle()
+
+    if (error && error.code !== "PGRST116") throw error // PGRST116 is "not found"
+    return data
+  } catch (error) {
+    console.error("Error fetching ERP config:", error)
+    return null
+  }
+}
+
 export const saveClient = async (client: Client): Promise<{ success: boolean; error?: string; data?: Client }> => {
   try {
     console.log("Saving client:", client.id, client.onboarding_status)
@@ -203,7 +253,15 @@ export const saveClient = async (client: Client): Promise<{ success: boolean; er
           console.error("Supabase insert error:", error)
           throw error
         }
-        return { success: true, data: dbRowToClient(data) }
+
+        // Save ERP config separately if provided
+        if (client.erp_config) {
+          await saveERPConfig(data.id, client.erp_config)
+        }
+
+        // Fetch the complete client data including ERP
+        const erpData = await getERPConfig(data.id)
+        return { success: true, data: dbRowToClient(data, erpData) }
       } else {
         // Update existing client
         const dbRow = await clientToDbRow(client, true)
@@ -215,7 +273,15 @@ export const saveClient = async (client: Client): Promise<{ success: boolean; er
           console.error("Supabase update error:", error)
           throw error
         }
-        return { success: true, data: dbRowToClient(data) }
+
+        // Save ERP config separately if provided
+        if (client.erp_config) {
+          await saveERPConfig(client.id, client.erp_config)
+        }
+
+        // Fetch the complete client data including ERP
+        const erpData = await getERPConfig(client.id)
+        return { success: true, data: dbRowToClient(data, erpData) }
       }
     } else {
       // Create new client with proper UUID
@@ -247,7 +313,15 @@ export const saveClient = async (client: Client): Promise<{ success: boolean; er
           console.error("Supabase update duplicate error:", error)
           throw error
         }
-        return { success: true, data: dbRowToClient(data) }
+
+        // Save ERP config separately if provided
+        if (client.erp_config) {
+          await saveERPConfig(duplicateCheck.id, client.erp_config)
+        }
+
+        // Fetch the complete client data including ERP
+        const erpData = await getERPConfig(duplicateCheck.id)
+        return { success: true, data: dbRowToClient(data, erpData) }
       }
 
       const { data, error } = await supabase.from("clients").insert(dbRow).select().single()
@@ -256,7 +330,15 @@ export const saveClient = async (client: Client): Promise<{ success: boolean; er
         console.error("Supabase insert error:", error)
         throw error
       }
-      return { success: true, data: dbRowToClient(data) }
+
+      // Save ERP config separately if provided
+      if (client.erp_config) {
+        await saveERPConfig(data.id, client.erp_config)
+      }
+
+      // Fetch the complete client data including ERP
+      const erpData = await getERPConfig(data.id)
+      return { success: true, data: dbRowToClient(data, erpData) }
     }
   } catch (error: any) {
     console.error("Error saving client:", error)
@@ -288,11 +370,28 @@ export const getClients = async (filters?: {
       query = query.or(`tenant_name.ilike.%${filters.search}%,tenant_document.ilike.%${filters.search}%`)
     }
 
-    const { data, error } = await query
+    const { data: clientsData, error } = await query
 
     if (error) throw error
 
-    const clients = data ? data.map(dbRowToClient) : []
+    // Fetch ERP configurations for all clients
+    const clientIds = clientsData?.map((c) => c.id) || []
+    const { data: erpConfigs } = await supabase.from("erp_configurations").select("*").in("client_id", clientIds)
+
+    // Create a map of ERP configs by client_id
+    const erpConfigMap = new Map()
+    erpConfigs?.forEach((config) => {
+      erpConfigMap.set(config.client_id, config)
+    })
+
+    // Combine client data with ERP configs
+    const clients = clientsData
+      ? clientsData.map((clientRow) => {
+          const erpData = erpConfigMap.get(clientRow.id)
+          return dbRowToClient(clientRow, erpData)
+        })
+      : []
+
     return { success: true, data: clients }
   } catch (error: any) {
     console.error("Error fetching clients:", error)
@@ -305,15 +404,18 @@ export const getClients = async (filters?: {
 
 export const getClient = async (id: string): Promise<{ success: boolean; data?: Client; error?: string }> => {
   try {
-    const { data, error } = await supabase.from("clients").select("*").eq("id", id).maybeSingle()
+    const { data: clientData, error } = await supabase.from("clients").select("*").eq("id", id).maybeSingle()
 
     if (error) throw error
 
-    if (!data) {
+    if (!clientData) {
       return { success: false, error: "Cliente não encontrado" }
     }
 
-    const client = dbRowToClient(data)
+    // Fetch ERP configuration for this client
+    const erpData = await getERPConfig(id)
+
+    const client = dbRowToClient(clientData, erpData)
     return { success: true, data: client }
   } catch (error: any) {
     console.error("Error fetching client:", error)
@@ -326,6 +428,10 @@ export const getClient = async (id: string): Promise<{ success: boolean; data?: 
 
 export const deleteClient = async (id: string): Promise<{ success: boolean; error?: string }> => {
   try {
+    // Delete ERP configuration first (will be handled by CASCADE, but explicit is better)
+    await supabase.from("erp_configurations").delete().eq("client_id", id)
+
+    // Delete the client
     const { error } = await supabase.from("clients").delete().eq("id", id)
 
     if (error) throw error
@@ -385,16 +491,9 @@ export const updateClientStep = async (
           updateData.api_tests = stepData.api_tests
           break
         case 3:
-          // ERP Config step - ensure template_id is a valid UUID
+          // ERP Config step - save to separate table
           if (stepData.template_id && isValidUUID(stepData.template_id)) {
-            updateData.erp_template_id = stepData.template_id
-            updateData.erp_template_name = stepData.template_name
-            updateData.erp_config = {
-              fields: stepData.fields || {},
-              enabled_commands: stepData.enabled_commands || [],
-            }
-            updateData.erp_status = stepData.connection_status || "pending"
-            updateData.erp_last_test = stepData.last_tested
+            await saveERPConfig(id, stepData)
           } else {
             console.warn("Invalid ERP template ID:", stepData.template_id)
           }
@@ -415,9 +514,8 @@ export const updateClientStep = async (
           break
         case 5:
           // Function Mapping step - updates ERP config
-          updateData.erp_config = {
-            fields: stepData.fields || {},
-            enabled_commands: stepData.enabled_commands || [],
+          if (stepData.template_id) {
+            await saveERPConfig(id, stepData)
           }
           break
         case 6:
