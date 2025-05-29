@@ -7,12 +7,8 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
-    domains: ['localhost'],
-    unoptimized: true
+    unoptimized: true,
   },
-  experimental: {
-    serverComponentsExternalPackages: ['@supabase/supabase-js']
-  }
 }
 
 export default nextConfig
