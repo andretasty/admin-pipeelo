@@ -119,15 +119,27 @@ async function clientToDbRow(client: Client, isUpdate = false) {
     openai_key: client.api_config.openai_key,
     openrouter_key: client.api_config.openrouter_key,
     api_tests: client.api_config.api_tests,
-    prompt_template_id: client.prompt_config?.template_id,
-    prompt_template_name: client.prompt_config?.template_name,
-    prompt_final_content: client.prompt_config?.final_content,
-    prompt_config: client.prompt_config
-      ? {
-          assistant_config: client.prompt_config.assistant_config,
-          placeholders_filled: client.prompt_config.placeholders_filled,
-        }
+    // Only persist prompt configuration if the template ID is a valid UUID
+    prompt_template_id: client.prompt_config?.template_id &&
+      isValidUUID(client.prompt_config.template_id)
+      ? client.prompt_config.template_id
       : null,
+    prompt_template_name: client.prompt_config?.template_id &&
+      isValidUUID(client.prompt_config.template_id)
+      ? client.prompt_config.template_name
+      : null,
+    prompt_final_content: client.prompt_config?.template_id &&
+      isValidUUID(client.prompt_config.template_id)
+      ? client.prompt_config.final_content
+      : null,
+    prompt_config:
+      client.prompt_config?.template_id &&
+      isValidUUID(client.prompt_config.template_id)
+        ? {
+            assistant_config: client.prompt_config.assistant_config,
+            placeholders_filled: client.prompt_config.placeholders_filled,
+          }
+        : null,
     categories: client.advanced_config?.categories || [],
     full_service_enabled: client.advanced_config?.full_service_enabled || false,
     webhooks: client.advanced_config?.webhooks || [],

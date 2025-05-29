@@ -1,6 +1,6 @@
-import type { PromptConfig } from "@/types"
+import type { PromptTemplate } from "@/types"
 
-export const AVAILABLE_PROMPTS: PromptConfig[] = [
+export const AVAILABLE_PROMPTS: PromptTemplate[] = [
   {
     id: "customer-support",
     name: "Atendimento ao Cliente",
