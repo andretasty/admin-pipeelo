@@ -21,15 +21,20 @@ function generateUUID(): string {
 // Validation function to check if prompt template exists
 export async function validatePromptTemplateExists(templateId: string): Promise<boolean> {
   if (!templateId || !isValidUUID(templateId)) {
+    console.warn(`Invalid UUID format for prompt template ID: ${templateId}`)
     return false
   }
 
   try {
-    const { data, error } = await supabase.from("prompt_templates").select("id").eq("id", templateId).single()
-
-    return !error && !!data
+    const { data, error } = await supabase.from("prompt_templates").select("id").eq("id", templateId).maybeSingle()
+    if (error && error.code !== "PGRST116") {
+      // PGRST116: "Searched for a single row, but 0 rows were found" - this is fine for maybeSingle
+      console.error("Error validating prompt template existence:", error)
+      return false
+    }
+    return !!data
   } catch (error) {
-    console.error("Error validating prompt template:", error)
+    console.error("Exception validating prompt template:", error)
     return false
   }
 }
@@ -37,15 +42,19 @@ export async function validatePromptTemplateExists(templateId: string): Promise<
 // Validation function to check if ERP template exists
 export async function validateERPTemplateExists(templateId: string): Promise<boolean> {
   if (!templateId || !isValidUUID(templateId)) {
+    console.warn(`Invalid UUID format for ERP template ID: ${templateId}`)
     return false
   }
 
   try {
-    const { data, error } = await supabase.from("erp_templates").select("id").eq("id", templateId).single()
-
-    return !error && !!data
+    const { data, error } = await supabase.from("erp_templates").select("id").eq("id", templateId).maybeSingle()
+    if (error && error.code !== "PGRST116") {
+      console.error("Error validating ERP template existence:", error)
+      return false
+    }
+    return !!data
   } catch (error) {
-    console.error("Error validating ERP template:", error)
+    console.error("Exception validating ERP template:", error)
     return false
   }
 }
@@ -204,7 +213,7 @@ async function clientToDbRow(client: Client, clientId?: string): Promise<any> {
     deployment_url: client.deployment_url,
   }
 
-  console.log(`Database row prepared with prompt_template_id: ${promptTemplateId}`)
+  console.log(`Database row prepared with prompt_template_id: ${promptTemplateId}, erp_template_id: ${erpTemplateId}`)
   return dbRow
 }
 
@@ -215,12 +224,12 @@ export async function saveClient(client: Client): Promise<{ success: boolean; da
     console.log("Saving client:", client.id)
 
     const dbRow = await clientToDbRow(client)
-    console.log("Database row prepared:", dbRow)
+    console.log("Database row prepared for save/update:", dbRow)
 
     const { data, error } = await supabase.from("clients").upsert(dbRow, { onConflict: "id" }).select().single()
 
     if (error) {
-      console.error("Supabase error:", error)
+      console.error("Supabase error during saveClient:", error)
       return { success: false, error: error.message }
     }
 
@@ -275,6 +284,9 @@ export async function updateClientStep(
           } else {
             return { success: false, error: `Invalid ERP template ID: ${stepData.template_id}` }
           }
+        } else {
+          // If template_id is removed/nullified
+          updatedClient.erp_config = undefined
         }
         break
       case 4: // Prompt Config
@@ -285,6 +297,9 @@ export async function updateClientStep(
           } else {
             return { success: false, error: `Invalid prompt template ID: ${stepData.template_id}` }
           }
+        } else {
+          // If template_id is removed/nullified
+          updatedClient.prompt_config = undefined
         }
         break
       case 5: // Function Mapping (updates ERP config)
@@ -295,15 +310,6 @@ export async function updateClientStep(
       case 6: // Advanced Config
         updatedClient.advanced_config = stepData
         break
-    }
-
-    // CRITICAL FIX: Validate existing prompt_template_id before saving
-    if (updatedClient.prompt_config?.template_id) {
-      const isValidPrompt = await validatePromptTemplateExists(updatedClient.prompt_config.template_id)
-      if (!isValidPrompt) {
-        console.warn(`Removing invalid prompt_template_id: ${updatedClient.prompt_config.template_id}`)
-        updatedClient.prompt_config = undefined
-      }
     }
 
     // Save updated client
@@ -328,7 +334,7 @@ export async function getClients(filters?: any): Promise<{ success: boolean; dat
     }
 
     if (filters?.search) {
-      query = query.or(`tenant_name.ilike.%${filters.search}%,tenant_email.ilike.%${filters.search}%`)
+      query = query.or(`tenant_name.ilike.%${filters.search}%,company_email.ilike.%${filters.search}%`)
     }
 
     const { data, error } = await query.order("created_at", { ascending: false })
@@ -402,7 +408,7 @@ export async function getDashboardMetrics(): Promise<{ success: boolean; data?: 
   }
 }
 
-// Atualizar a função authenticateUser para melhor tratamento de erros
+// CORREÇÃO APLICADA AQUI:
 export async function authenticateUser(
   email: string,
   password: string,
@@ -410,36 +416,39 @@ export async function authenticateUser(
   try {
     console.log("Tentando autenticar usuário:", email)
 
-    const { data, error } = await supabase.from("users").select("*").eq("email", email).eq("password_hash", password)
+    // Removido .single() e tratando o array de resultados
+    const { data, error } = await supabase.from("users").select("*").eq("email", email).eq("password_hash", password) // Comparando com password_hash
 
     if (error) {
-      console.error("Erro na consulta de autenticação:", error)
-      return { success: false, error: "Erro interno do sistema" }
+      console.error("Erro na consulta de autenticação Supabase:", error)
+      return { success: false, error: "Erro interno do sistema ao autenticar." }
     }
 
     if (!data || data.length === 0) {
-      console.log("Nenhum usuário encontrado com essas credenciais")
-      return { success: false, error: "Credenciais inválidas" }
+      console.log("Nenhum usuário encontrado com essas credenciais:", email)
+      return { success: false, error: "Credenciais inválidas." }
     }
 
     if (data.length > 1) {
-      console.warn("Múltiplos usuários encontrados com as mesmas credenciais")
-      return { success: false, error: "Erro de configuração do sistema" }
+      // Este caso é problemático e pode indicar dados duplicados ou um problema de lógica.
+      console.warn("Múltiplos usuários encontrados com as mesmas credenciais para:", email)
+      // Por segurança, não autenticar se houver ambiguidade.
+      return { success: false, error: "Erro de configuração: Múltiplos usuários encontrados." }
     }
 
+    // Se chegou aqui, data.length === 1
     console.log("Usuário autenticado com sucesso:", data[0].email)
     return { success: true, user: data[0] }
   } catch (error: any) {
-    console.error("Falha na autenticação:", error)
-    return { success: false, error: error.message || "Falha na autenticação" }
+    console.error("Exceção na função authenticateUser:", error)
+    return { success: false, error: error.message || "Falha na autenticação." }
   }
 }
 
-// Atualizar a função createUser para usar password_hash em vez de password
 export async function createUser(
   name: string,
   email: string,
-  password: string,
+  password: string, // Senha em plain text, será armazenada como password_hash
   role: string,
   document?: string,
 ): Promise<{ success: boolean; error?: string }> {
@@ -448,7 +457,7 @@ export async function createUser(
       id: generateUUID(),
       name,
       email,
-      password_hash: password,
+      password_hash: password, // Armazenando a senha diretamente no password_hash
       role,
       document,
       created_at: new Date().toISOString(),
@@ -465,13 +474,12 @@ export async function createUser(
   }
 }
 
-// Atualizar a função updateUserPassword para usar password_hash em vez de password
 export async function updateUserPassword(id: string, password: string): Promise<{ success: boolean; error?: string }> {
   try {
     const { error } = await supabase
       .from("users")
       .update({
-        password_hash: password,
+        password_hash: password, // Armazenando a nova senha diretamente no password_hash
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
@@ -485,8 +493,6 @@ export async function updateUserPassword(id: string, password: string): Promise<
     return { success: false, error: error.message || "Unknown error occurred" }
   }
 }
-
-// Adicionar as funções de gerenciamento de usuários após a função updateUserPassword
 
 export async function getUsers(): Promise<{ success: boolean; data?: any[]; error?: string }> {
   try {
