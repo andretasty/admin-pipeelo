@@ -15,15 +15,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { getUsers, createUser, deleteUser, updateUserPassword } from "@/lib/database"
-import { validateEmail, validateCPF, formatCPF } from "@/lib/validations"
+import { validateEmail } from "@/lib/validations"
 import { Plus, Trash2, User, Shield, Eye, EyeOff, Key } from "lucide-react"
 
-interface UserData {
+// Na interface UserData, remover o campo document
+export interface UserData {
   id?: string
   name: string
   email: string
   password?: string
-  document?: string
   role: string
   created_at?: string
   updated_at?: string
@@ -40,11 +40,11 @@ export default function UserManagement({ onBack }: UserManagementProps) {
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserData | null>(null)
+  // No estado formData, remover document
   const [formData, setFormData] = useState<UserData>({
     name: "",
     email: "",
     password: "",
-    document: "",
     role: "user",
   })
   const [newPassword, setNewPassword] = useState("")
@@ -71,32 +71,34 @@ export default function UserManagement({ onBack }: UserManagementProps) {
     setLoading(false)
   }
 
+  // Na função validateForm, remover a validação de document
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {}
 
     if (!formData.name.trim()) errors.name = "Nome é obrigatório"
     if (!formData.email || !validateEmail(formData.email)) errors.email = "Email inválido"
     if (!formData.password || formData.password.length < 8) errors.password = "Senha deve ter pelo menos 8 caracteres"
-    if (formData.document && !validateCPF(formData.document)) errors.document = "CPF inválido"
     if (!formData.role) errors.role = "Função é obrigatória"
 
     setFormErrors(errors)
     return Object.keys(errors).length === 0
   }
 
+  // Na função handleCreateUser, remover o parâmetro document
   const handleCreateUser = async () => {
     if (!validateForm()) return
 
     setSaving(true)
-    const result = await createUser(formData.name, formData.email, formData.password!, formData.role, formData.document)
+    const result = await createUser(formData.name, formData.email, formData.password!, formData.role)
 
     if (result.success) {
       setShowCreateDialog(false)
-      setFormData({ name: "", email: "", password: "", document: "", role: "user" })
+      setFormData({ name: "", email: "", password: "", role: "user" })
       setFormErrors({})
       fetchUsers()
     } else {
-      setError(result.error || "Erro ao criar usuário")
+      // Mostrar erro específico no modal ao invés de usar o error state global
+      setFormErrors({ submit: result.error || "Erro ao criar usuário" })
     }
     setSaving(false)
   }
@@ -207,17 +209,8 @@ export default function UserManagement({ onBack }: UserManagementProps) {
                   {formErrors.email && <p className="text-red-500 text-sm mt-1">{formErrors.email}</p>}
                 </div>
 
-                <div>
-                  <div className="label-small">CPF</div>
-                  <Input
-                    value={formData.document || ""}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, document: formatCPF(e.target.value) }))}
-                    placeholder="000.000.000-00"
-                    maxLength={14}
-                    className={`input-custom h-10 ${formErrors.document ? "border-red-500" : ""}`}
-                  />
-                  {formErrors.document && <p className="text-red-500 text-sm mt-1">{formErrors.document}</p>}
-                </div>
+                {/* Remover completamente o campo CPF do formulário de criação
+                (remover todo o div que contém o input de CPF) */}
 
                 <div>
                   <div className="label-small">Função *</div>
@@ -257,6 +250,12 @@ export default function UserManagement({ onBack }: UserManagementProps) {
                   </div>
                   {formErrors.password && <p className="text-red-500 text-sm mt-1">{formErrors.password}</p>}
                 </div>
+
+                {formErrors.submit && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                    <p className="text-red-700 text-sm">{formErrors.submit}</p>
+                  </div>
+                )}
 
                 <div className="flex justify-end space-x-3 pt-4">
                   <Button onClick={() => setShowCreateDialog(false)} variant="outline" disabled={saving}>
@@ -344,17 +343,8 @@ export default function UserManagement({ onBack }: UserManagementProps) {
                     </div>
                   </div>
 
-                  {user.document && (
-                    <div className="flex items-center space-x-3">
-                      <User size={16} style={{ color: "#718096" }} />
-                      <div>
-                        <div className="label-small">CPF</div>
-                        <div className="text-sm font-medium" style={{ color: "#2D3748" }}>
-                          {user.document}
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  {/* Remover também a exibição do CPF na listagem de usuários
+                  (remover o div que mostra o document na CardContent) */}
 
                   <div className="flex items-center space-x-3">
                     <div className="w-4 h-4 rounded-full bg-green-500"></div>

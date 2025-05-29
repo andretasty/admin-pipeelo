@@ -17,7 +17,6 @@ import {
   Building2,
   User,
   Key,
-  MessageSquare,
   Search,
   Clock,
   AlertCircle,
@@ -378,26 +377,6 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
 
                 <CardContent className="pt-0">
                   <div className="space-y-3 mb-6">
-                    <div className="flex items-center space-x-3">
-                      <User size={16} style={{ color: "#718096" }} />
-                      <div>
-                        <div className="label-small">Administrador</div>
-                        <div className="text-sm font-medium" style={{ color: "#2D3748" }}>
-                          {client.admin_user.name}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      <Building2 size={16} style={{ color: "#718096" }} />
-                      <div>
-                        <div className="label-small">Setor</div>
-                        <div className="text-sm font-medium" style={{ color: "#2D3748" }}>
-                          {client.tenant.sector}
-                        </div>
-                      </div>
-                    </div>
-
                     {client.erp_config && (
                       <div className="flex items-center space-x-3">
                         <Key size={16} style={{ color: "#718096" }} />
@@ -405,18 +384,6 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
                           <div className="label-small">ERP</div>
                           <div className="text-sm font-medium" style={{ color: "#2D3748" }}>
                             {client.erp_config.template_name}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {client.prompt_config && (
-                      <div className="flex items-center space-x-3">
-                        <MessageSquare size={16} style={{ color: "#718096" }} />
-                        <div>
-                          <div className="label-small">Prompt</div>
-                          <div className="text-sm font-medium" style={{ color: "#2D3748" }}>
-                            {client.prompt_config.template_name}
                           </div>
                         </div>
                       </div>

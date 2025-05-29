@@ -5,7 +5,6 @@ import type React from "react"
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { Tenant, AdminUser } from "@/types"
 import {
   validateCNPJ,
@@ -35,7 +34,7 @@ const SECTORS = [
   "Logística",
   "Alimentício",
   "Construção",
-  "Outros"
+  "Outros",
 ]
 
 export default function Step1TenantData({ tenant, adminUser, onNext, saving = false }: Step1Props) {
@@ -82,8 +81,6 @@ export default function Step1TenantData({ tenant, adminUser, onNext, saving = fa
     if (!tenantData.email || !validateEmail(tenantData.email)) {
       newErrors.tenantEmail = "Email inválido"
     }
-    if (!tenantData.sector?.trim()) newErrors.sector = "Setor é obrigatório"
-
     // Address validations
     if (!tenantData.address?.street?.trim()) newErrors.street = "Rua é obrigatória"
     if (!tenantData.address?.number?.trim()) newErrors.number = "Número é obrigatório"
@@ -115,7 +112,7 @@ export default function Step1TenantData({ tenant, adminUser, onNext, saving = fa
     if (validateForm()) {
       onNext({
         tenant: tenantData as Tenant,
-        adminUser: userData as AdminUser
+        adminUser: userData as AdminUser,
       })
     }
   }
@@ -217,35 +214,6 @@ export default function Step1TenantData({ tenant, adminUser, onNext, saving = fa
               style={{ color: "#2D3748" }}
             />
             {errors.tenantEmail && <p className="text-red-500 text-sm mt-2">{errors.tenantEmail}</p>}
-          </div>
-
-          <div>
-            <div className="label-small">Website</div>
-            <Input
-              type="url"
-              value={tenantData.website || ""}
-              onChange={(e) => handleTenantChange("website", e.target.value)}
-              placeholder="https://www.empresa.com"
-              className="input-custom h-12"
-              style={{ color: "#2D3748" }}
-            />
-          </div>
-
-          <div>
-            <div className="label-small">Setor *</div>
-            <Select value={tenantData.sector || ""} onValueChange={(value) => handleTenantChange("sector", value)}>
-              <SelectTrigger className={`h-12 ${errors.sector ? "border-red-500" : ""}`}>
-                <SelectValue placeholder="Selecione o setor" />
-              </SelectTrigger>
-              <SelectContent>
-                {SECTORS.map((sector) => (
-                  <SelectItem key={sector} value={sector}>
-                    {sector}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.sector && <p className="text-red-500 text-sm mt-2">{errors.sector}</p>}
           </div>
         </div>
 
@@ -407,11 +375,7 @@ export default function Step1TenantData({ tenant, adminUser, onNext, saving = fa
       </div>
 
       <div className="flex justify-end pt-6">
-        <Button 
-          type="submit" 
-          disabled={saving}
-          className="btn-primary h-12 px-8"
-        >
+        <Button type="submit" disabled={saving} className="btn-primary h-12 px-8">
           {saving ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

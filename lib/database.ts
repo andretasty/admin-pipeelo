@@ -526,7 +526,6 @@ export async function createUser(
   email: string,
   password: string,
   role: string,
-  document?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Validate password strength
@@ -545,7 +544,6 @@ export async function createUser(
       name,
       email,
       password_hash: hashedPassword,
-      document,
       role,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
