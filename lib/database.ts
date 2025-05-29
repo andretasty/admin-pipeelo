@@ -10,7 +10,7 @@ function isValidUUID(uuid: string): boolean {
 }
 
 // Simple UUID generator without external dependency
-function generateUUID(): string {
+export function generateUUID(): string {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0
     const v = c == "x" ? r : (r & 0x3) | 0x8
@@ -68,8 +68,8 @@ function dbRowToClient(row: any): Client {
       document: row.tenant_document,
       phone_number: row.tenant_phone,
       email: row.company_email || row.tenant_email,
-      website: row.company_website,
-      sector: row.company_sector,
+      website: row.company_website || row.tenant_website,
+      sector: row.company_sector || row.tenant_sector,
       address: {
         street: row.address_street,
         number: row.address_number,
@@ -88,14 +88,19 @@ function dbRowToClient(row: any): Client {
       document: row.admin_document,
       role: row.admin_role || "admin",
     },
-    api_config: row.api_config || { api_tests: {} },
+    api_config: row.api_config || {
+      openai_key: row.openai_key,
+      openrouter_key: row.openrouter_key,
+      api_tests: row.api_tests || {},
+    },
     erp_config: row.erp_template_id
       ? {
           template_id: row.erp_template_id,
           template_name: row.erp_template_name,
-          fields: row.erp_config?.fields || {},
-          enabled_commands: row.erp_config?.enabled_commands || [],
-          connection_status: row.erp_config?.connection_status || "pending",
+          fields: (row.erp_config && row.erp_config.fields) || {},
+          enabled_commands: (row.erp_config && row.erp_config.enabled_commands) || [],
+          connection_status:
+            (row.erp_config && row.erp_config.connection_status) || row.erp_connection_status || "pending",
         }
       : undefined,
     prompt_config: row.prompt_template_id
@@ -103,18 +108,29 @@ function dbRowToClient(row: any): Client {
           template_id: row.prompt_template_id,
           template_name: row.prompt_template_name,
           final_content: row.prompt_final_content,
-          assistant_config: row.prompt_config?.assistant_config || {
-            provider: "openai",
-            model: "gpt-4",
-            temperature: 0.7,
-            top_p: 1.0,
-            frequency_penalty: 0,
-            response_delay: 0,
-          },
-          placeholders_filled: row.prompt_config?.placeholders_filled || {},
+          assistant_config: (row.prompt_config && row.prompt_config.assistant_config) ||
+            row.assistant_config || {
+              provider: "openai",
+              model: "gpt-4",
+              temperature: 0.7,
+              top_p: 1.0,
+              frequency_penalty: 0,
+              response_delay: 0,
+            },
+          placeholders_filled:
+            (row.prompt_config && row.prompt_config.placeholders_filled) || row.prompt_placeholders || {},
         }
       : undefined,
-    advanced_config: row.advanced_config,
+    advanced_config: row.advanced_config || {
+      categories: row.categories || [],
+      full_service_enabled: row.full_service_enabled || false,
+      webhooks: row.webhooks || [],
+      backup_settings: row.backup_settings || {
+        frequency: "weekly",
+        retention_days: 30,
+        enabled: false,
+      },
+    },
     onboarding_status: row.onboarding_status || "draft",
     current_step: row.current_step || 1,
     total_steps: row.total_steps || 7,
@@ -174,6 +190,9 @@ async function clientToDbRow(client: Client, clientId?: string): Promise<any> {
     }
   }
 
+  // Prepare API config
+  const apiConfig = client.api_config || {}
+
   const dbRow = {
     id,
     tenant_name: client.tenant.name,
@@ -195,7 +214,11 @@ async function clientToDbRow(client: Client, clientId?: string): Promise<any> {
     admin_password_hash: client.admin_user.password,
     admin_document: client.admin_user.document,
     admin_role: client.admin_user.role,
-    api_config: client.api_config,
+    // Store API keys both in individual columns and in the JSON structure
+    openai_key: apiConfig.openai_key,
+    openrouter_key: apiConfig.openrouter_key,
+    api_config: apiConfig,
+    api_tests: apiConfig.api_tests || {},
     erp_template_id: erpTemplateId,
     erp_template_name: erpTemplateName,
     erp_config: erpConfig,
@@ -216,8 +239,6 @@ async function clientToDbRow(client: Client, clientId?: string): Promise<any> {
   console.log(`Database row prepared with prompt_template_id: ${promptTemplateId}, erp_template_id: ${erpTemplateId}`)
   return dbRow
 }
-
-export { generateUUID }
 
 export async function saveClient(client: Client): Promise<{ success: boolean; data?: Client; error?: string }> {
   try {
@@ -243,13 +264,15 @@ export async function saveClient(client: Client): Promise<{ success: boolean; da
 
 export async function updateClientStep(
   clientId: string,
-  step: number,
-  stepData: any,
+  newCurrentStep: number, // Renamed from 'step'
+  dataFromCompletedStep: any,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    console.log(`Updating client ${clientId} to step ${step}:`, stepData)
+    console.log(
+      `Updating client ${clientId} to new current step ${newCurrentStep} with data from completed step:`,
+      dataFromCompletedStep,
+    )
 
-    // Get current client data
     const { data: currentData, error: fetchError } = await supabase
       .from("clients")
       .select("*")
@@ -261,63 +284,88 @@ export async function updateClientStep(
       return { success: false, error: fetchError.message }
     }
 
-    // Convert to Client object and update with step data
-    const currentClient = dbRowToClient(currentData)
+    const updatedClient: Client = dbRowToClient(currentData)
+    updatedClient.current_step = newCurrentStep // Set the new current step
+    updatedClient.updated_at = new Date().toISOString()
 
-    // Update client with step data
-    const updatedClient: Client = {
-      ...currentClient,
-      current_step: step,
-      updated_at: new Date().toISOString(),
-    }
+    const completedStepNumber = newCurrentStep - 1 // Calculate the step that was actually completed
 
-    // Apply step-specific updates with validation
-    switch (step) {
-      case 2: // API Config
-        updatedClient.api_config = stepData
+    console.log(`Processing data for completed step number: ${completedStepNumber}`)
+
+    switch (completedStepNumber) {
+      case 1: // Tenant Data was completed
+        console.log("Applying Tenant and Admin User data")
+        updatedClient.tenant = dataFromCompletedStep.tenant
+        updatedClient.admin_user = dataFromCompletedStep.adminUser
         break
-      case 3: // ERP Config
-        if (stepData.template_id) {
-          const isValidERP = await validateERPTemplateExists(stepData.template_id)
+      case 2: // API Config was completed
+        console.log("Applying API Config data")
+        updatedClient.api_config = dataFromCompletedStep
+        break
+      case 3: // ERP Config was completed
+        console.log("Applying ERP Config data")
+        if (dataFromCompletedStep.template_id) {
+          const isValidERP = await validateERPTemplateExists(dataFromCompletedStep.template_id)
           if (isValidERP) {
-            updatedClient.erp_config = stepData
+            updatedClient.erp_config = dataFromCompletedStep
           } else {
-            return { success: false, error: `Invalid ERP template ID: ${stepData.template_id}` }
+            console.error(`Invalid ERP template ID: ${dataFromCompletedStep.template_id}`)
+            return { success: false, error: `Invalid ERP template ID: ${dataFromCompletedStep.template_id}` }
           }
         } else {
-          // If template_id is removed/nullified
           updatedClient.erp_config = undefined
         }
         break
-      case 4: // Prompt Config
-        if (stepData.template_id) {
-          const isValidPrompt = await validatePromptTemplateExists(stepData.template_id)
+      case 4: // Prompt Config was completed
+        console.log("Applying Prompt Config data")
+        if (dataFromCompletedStep.template_id) {
+          const isValidPrompt = await validatePromptTemplateExists(dataFromCompletedStep.template_id)
           if (isValidPrompt) {
-            updatedClient.prompt_config = stepData
+            updatedClient.prompt_config = dataFromCompletedStep
           } else {
-            return { success: false, error: `Invalid prompt template ID: ${stepData.template_id}` }
+            console.error(`Invalid prompt template ID: ${dataFromCompletedStep.template_id}`)
+            return { success: false, error: `Invalid prompt template ID: ${dataFromCompletedStep.template_id}` }
           }
         } else {
-          // If template_id is removed/nullified
           updatedClient.prompt_config = undefined
         }
         break
       case 5: // Function Mapping (updates ERP config)
+        console.log("Applying Function Mapping data")
         if (updatedClient.erp_config) {
-          updatedClient.erp_config = { ...updatedClient.erp_config, ...stepData }
+          // Ensure erp_config exists before trying to merge
+          updatedClient.erp_config = { ...updatedClient.erp_config, ...dataFromCompletedStep }
+        } else if (dataFromCompletedStep.template_id) {
+          // If erp_config was not set but this step provides full erp data
+          // This case might need more robust handling if step 5 can define a new ERP config
+          console.warn(
+            "Function mapping applied without existing ERP config. Assuming dataFromCompletedStep is a full ERPConfig.",
+          )
+          const isValidERP = await validateERPTemplateExists(dataFromCompletedStep.template_id)
+          if (isValidERP) {
+            updatedClient.erp_config = dataFromCompletedStep
+          } else {
+            return {
+              success: false,
+              error: `Invalid ERP template ID from function mapping: ${dataFromCompletedStep.template_id}`,
+            }
+          }
         }
         break
       case 6: // Advanced Config
-        updatedClient.advanced_config = stepData
+        console.log("Applying Advanced Config data")
+        updatedClient.advanced_config = dataFromCompletedStep
         break
+      default:
+        console.warn(`No specific data handling for completed step number: ${completedStepNumber}`)
     }
 
-    // Save updated client
+    console.log("Updated client object before saving:", updatedClient)
     const result = await saveClient(updatedClient)
     return result.success ? { success: true } : { success: false, error: result.error }
   } catch (error: any) {
     console.error("Error updating client step:", error)
-    return { success: false, error: error.message || "Unknown error occurred" }
+    return { success: false, error: error.message || "Unknown error occurred during step update" }
   }
 }
 
@@ -330,7 +378,7 @@ export async function getClients(filters?: any): Promise<{ success: boolean; dat
     }
 
     if (filters?.sector) {
-      query = query.eq("tenant_sector", filters.sector)
+      query = query.eq("company_sector", filters.sector)
     }
 
     if (filters?.search) {

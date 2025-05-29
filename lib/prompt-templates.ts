@@ -13,19 +13,23 @@ function dbRowToPromptTemplate(row: any): PromptTemplate {
     sector: row.sector || "",
     content: row.content || "",
     placeholders: Array.isArray(row.placeholders) ? row.placeholders : [],
-    variables: {},
+    variables: row.variables || {},
   }
 }
 
 export const getPromptTemplates = async (): Promise<PromptTemplate[]> => {
   try {
-    const { data, error } = await supabase.from("prompt_templates").select("*").order("name")
+    const { data, error } = await supabase.from("prompt_templates").select("*").eq("is_active", true).order("name")
 
-    if (error) throw error
+    if (error) {
+      console.error("Error fetching prompt templates:", error)
+      throw error
+    }
     return data ? data.map(dbRowToPromptTemplate) : []
   } catch (error) {
     console.error("Error fetching prompt templates:", error)
-    return []
+    // Return fallback templates if database query fails
+    return PROMPT_TEMPLATES
   }
 }
 
@@ -52,29 +56,38 @@ export const getPromptTemplate = async (id: string): Promise<PromptTemplate | un
 
 export const getPromptTemplatesByCategory = async (category?: string): Promise<PromptTemplate[]> => {
   try {
-    let query = supabase.from("prompt_templates").select("*")
+    let query = supabase.from("prompt_templates").select("*").eq("is_active", true)
 
     if (category) {
       query = query.eq("category", category)
     }
 
     const { data, error } = await query.order("name")
-    if (error) throw error
+    if (error) {
+      console.error("Error fetching prompt templates by category:", error)
+      throw error
+    }
     return data ? data.map(dbRowToPromptTemplate) : []
   } catch (error) {
     console.error("Error fetching prompt templates by category:", error)
-    return []
+    // Filter fallback templates by category if database query fails
+    if (category) {
+      return PROMPT_TEMPLATES.filter((t) => t.category === category)
+    }
+    return PROMPT_TEMPLATES
   }
 }
 
 export const fillPromptPlaceholders = (template: PromptTemplate, values: Record<string, string>): string => {
   let content = template.content
 
-  template.placeholders.forEach((placeholder) => {
-    const value = values[placeholder] || `[${placeholder}]`
-    const regex = new RegExp(`{${placeholder}}`, "g")
-    content = content.replace(regex, value)
-  })
+  if (Array.isArray(template.placeholders)) {
+    template.placeholders.forEach((placeholder) => {
+      const value = values[placeholder] || `[${placeholder}]`
+      const regex = new RegExp(`{${placeholder}}`, "g")
+      content = content.replace(regex, value)
+    })
+  }
 
   return content
 }
@@ -93,10 +106,28 @@ export const extractPlaceholders = (content: string): string[] => {
   return matches
 }
 
-// Keep the old constant for backward compatibility, but fetch from DB
-export let PROMPT_TEMPLATES: PromptTemplate[] = []
-
-// Initialize templates on module load
-getPromptTemplates().then((templates) => {
-  PROMPT_TEMPLATES = templates
-})
+// Fallback templates in case database is not available
+export const PROMPT_TEMPLATES: PromptTemplate[] = [
+  {
+    id: "f8a7c3d9-e6b5-4a2f-8d1c-9b3e4f7a2d1e",
+    name: "Atendimento ao Cliente",
+    description: "Prompt otimizado para atendimento e suporte ao cliente com tom profissional e empático.",
+    category: "support",
+    sector: "",
+    content:
+      "Você é um assistente de atendimento ao cliente especializado em fornecer suporte excepcional. Sempre responda de forma educada, empática e profissional. Você representa a empresa {company_name} que atua no setor de {company_sector}. Quando não souber a resposta, indique que vai consultar um especialista.",
+    placeholders: ["company_name", "company_sector"],
+    variables: {},
+  },
+  {
+    id: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+    name: "Assistente de Vendas",
+    description: "Prompt focado em vendas consultivas e identificação de oportunidades de negócio.",
+    category: "sales",
+    sector: "",
+    content:
+      "Você é um assistente de vendas especializado em vendas consultivas para {company_name}. Seu objetivo é entender as necessidades do cliente e apresentar soluções adequadas. Os produtos/serviços que você pode oferecer são: {products_services}.",
+    placeholders: ["company_name", "products_services"],
+    variables: {},
+  },
+]
