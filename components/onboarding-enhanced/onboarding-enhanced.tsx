@@ -2,8 +2,7 @@
 
 import { useState } from "react"
 import type { Client, Tenant, AdminUser, ApiConfig, ERPConfig, PromptConfig, AdvancedConfig } from "@/types"
-import { saveClient, updateClientStep } from "@/lib/database"
-import { generateUUID } from "@/lib/utils"
+import { saveClient, updateClientStep, generateUUID } from "@/lib/database"
 import ProgressIndicatorEnhanced from "./progress-indicator-enhanced"
 import Step1TenantData from "./step1-tenant-data"
 import Step2ApiConfig from "./step2-api-config"
@@ -36,6 +35,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
   const [currentStep, setCurrentStep] = useState(editingClient?.current_step || 1)
   const [saving, setSaving] = useState(false)
   const [clientId, setClientId] = useState(editingClient?.id)
+  const [error, setError] = useState<string | null>(null)
 
   // Step data states
   const [tenant, setTenant] = useState<Tenant | undefined>(editingClient?.tenant)
@@ -47,8 +47,11 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
 
   const handleStepComplete = async (step: number, stepData: any) => {
     setSaving(true)
+    setError(null)
 
     try {
+      console.log(`Processing step ${step}:`, stepData)
+
       // Update local state based on step
       switch (step) {
         case 1:
@@ -77,12 +80,19 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
           return
       }
 
-      // Save to database if we have a client ID
+      // Save to database
       if (clientId) {
-        await updateClientStep(clientId, step + 1, stepData)
+        // Update existing client step
+        console.log(`Updating step for client ${clientId}`)
+        const result = await updateClientStep(clientId, step + 1, stepData)
+        if (!result.success) {
+          throw new Error(result.error || "Erro ao atualizar etapa")
+        }
       } else if (step === 1) {
         // Create new client after first step with proper UUID
         const newClientId = generateUUID()
+        console.log(`Creating new client with ID: ${newClientId}`)
+
         const newClient: Client = {
           id: newClientId,
           tenant: stepData.tenant,
@@ -98,24 +108,43 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
         const result = await saveClient(newClient)
         if (result.success && result.data) {
           setClientId(result.data.id)
+          console.log(`Client created successfully with ID: ${result.data.id}`)
         } else {
           throw new Error(result.error || "Erro ao criar cliente")
         }
       }
 
+      // Move to next step
       setCurrentStep(step + 1)
-    } catch (error) {
+      console.log(`Successfully moved to step ${step + 1}`)
+    } catch (error: any) {
       console.error("Error saving step:", error)
-      alert("Erro ao salvar progresso. Tente novamente.")
+
+      // Enhanced error handling for constraint violations
+      if (error.message?.includes("foreign key constraint")) {
+        if (error.message?.includes("prompt_template_id_fkey")) {
+          setError("Erro de configuração: Template de prompt inválido. Tente selecionar um template diferente.")
+        } else if (error.message?.includes("erp_template_id_fkey")) {
+          setError("Erro de configuração: Template de ERP inválido. Tente selecionar um template diferente.")
+        } else {
+          setError("Erro de integridade de dados. Por favor, verifique as configurações e tente novamente.")
+        }
+      } else {
+        setError(error.message || "Erro ao salvar progresso. Tente novamente.")
+      }
     } finally {
       setSaving(false)
     }
   }
 
   const handleFinalDeploy = async () => {
-    if (!clientId) return
+    if (!clientId) {
+      throw new Error("ID do cliente não encontrado")
+    }
 
     try {
+      console.log("Starting final deployment...")
+
       // Create final client object
       const finalClient: Client = {
         id: clientId,
@@ -134,22 +163,30 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
         deployment_url: `https://${tenant?.name.toLowerCase().replace(/\s+/g, "-")}.pipeelo.com`,
       }
 
+      console.log("Final client data:", finalClient)
+
       const result = await saveClient(finalClient)
       if (result.success) {
+        console.log("Deployment successful!")
         onComplete()
       } else {
-        throw new Error(result.error)
+        throw new Error(result.error || "Erro no deploy")
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error deploying:", error)
-      alert("Erro no deploy. Tente novamente.")
+      throw error
     }
   }
 
   const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1)
+      setError(null)
     }
+  }
+
+  const clearError = () => {
+    setError(null)
   }
 
   return (
@@ -189,6 +226,31 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
       {/* Main Content */}
       <main className="max-w-6xl mx-auto px-6 lg:px-8 py-8">
         <ProgressIndicatorEnhanced currentStep={currentStep} totalSteps={7} stepTitles={STEP_TITLES} />
+
+        {/* Enhanced Error Display */}
+        {error && (
+          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-red-800 font-medium">Erro ao salvar progresso</h3>
+                <p className="text-red-700 text-sm mt-1">{error}</p>
+                <div className="mt-3">
+                  <Button
+                    onClick={() => window.location.reload()}
+                    variant="outline"
+                    size="sm"
+                    className="text-red-600 border-red-300 hover:bg-red-50"
+                  >
+                    Recarregar Página
+                  </Button>
+                </div>
+              </div>
+              <Button onClick={clearError} variant="ghost" size="sm" className="text-red-600 hover:text-red-800">
+                ✕
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="card-subtle p-8">
           {currentStep === 1 && (

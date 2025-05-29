@@ -22,10 +22,14 @@ export default function Login() {
     setLoading(true)
     setError("")
 
+    console.log("Tentando login com:", email)
     const success = await login(email, password)
 
     if (!success) {
+      console.error("Login falhou")
       setError("Email ou senha inválidos")
+    } else {
+      console.log("Login bem-sucedido")
     }
 
     setLoading(false)
