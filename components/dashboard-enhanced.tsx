@@ -2,15 +2,31 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/auth-context"
 import { getClients, deleteClient, getDashboardMetrics } from "@/lib/database"
 import type { Client, DashboardMetrics } from "@/types"
-import { Plus, Edit, Trash2, LogOut, Building2, User, Key, MessageSquare, Search, Filter, TrendingUp, Clock, CheckCircle, AlertCircle, BarChart3, Users, Target, Zap } from 'lucide-react'
+import {
+  Plus,
+  Edit,
+  Trash2,
+  LogOut,
+  Building2,
+  User,
+  Key,
+  MessageSquare,
+  Search,
+  Clock,
+  AlertCircle,
+  Users,
+  Target,
+  Zap,
+} from "lucide-react"
 import Image from "next/image"
+import UserManagement from "./user-management"
 
 interface DashboardEnhancedProps {
   onCreateClient: () => void
@@ -26,6 +42,7 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [sectorFilter, setSectorFilter] = useState<string>("all")
   const { logout } = useAuth()
+  const [currentView, setCurrentView] = useState<"dashboard" | "users">("dashboard")
 
   useEffect(() => {
     fetchData()
@@ -34,28 +51,25 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
   const fetchData = async () => {
     setLoading(true)
     setError(null)
-    
+
     // Fetch clients with filters
     const filters: any = {}
     if (statusFilter !== "all") filters.status = statusFilter
     if (sectorFilter !== "all") filters.sector = sectorFilter
     if (searchTerm) filters.search = searchTerm
 
-    const [clientsResult, metricsResult] = await Promise.all([
-      getClients(filters),
-      getDashboardMetrics()
-    ])
-    
+    const [clientsResult, metricsResult] = await Promise.all([getClients(filters), getDashboardMetrics()])
+
     if (clientsResult.success && clientsResult.data) {
       setClients(clientsResult.data)
     } else {
-      setError(clientsResult.error || 'Erro ao carregar clientes')
+      setError(clientsResult.error || "Erro ao carregar clientes")
     }
 
     if (metricsResult.success && metricsResult.data) {
       setMetrics(metricsResult.data)
     }
-    
+
     setLoading(false)
   }
 
@@ -72,31 +86,75 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'completed':
-      case 'deployed':
-        return 'bg-green-100 text-green-800'
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-800'
-      case 'failed':
-        return 'bg-red-100 text-red-800'
+      case "completed":
+      case "deployed":
+        return "bg-green-100 text-green-800"
+      case "in_progress":
+        return "bg-blue-100 text-blue-800"
+      case "failed":
+        return "bg-red-100 text-red-800"
       default:
-        return 'bg-gray-100 text-gray-800'
+        return "bg-gray-100 text-gray-800"
     }
   }
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'draft': return 'Rascunho'
-      case 'in_progress': return 'Em Progresso'
-      case 'completed': return 'Concluído'
-      case 'deployed': return 'Implantado'
-      case 'failed': return 'Falhou'
-      default: return status
+      case "draft":
+        return "Rascunho"
+      case "in_progress":
+        return "Em Progresso"
+      case "completed":
+        return "Concluído"
+      case "deployed":
+        return "Implantado"
+      case "failed":
+        return "Falhou"
+      default:
+        return status
     }
   }
 
   const getStepProgress = (currentStep: number, totalSteps: number) => {
     return Math.round((currentStep / totalSteps) * 100)
+  }
+
+  if (currentView === "users") {
+    return (
+      <div className="min-h-screen" style={{ backgroundColor: "#F8F9FA" }}>
+        {/* Header */}
+        <header style={{ backgroundColor: "#FFFFFF" }} className="border-b border-gray-100">
+          <div className="max-w-7xl mx-auto px-6 lg:px-8">
+            <div className="flex justify-between items-center h-20">
+              <div className="flex items-center space-x-6">
+                <Image src="/pipeelo-logo.png" alt="Pipeelo" width={120} height={36} className="h-10 w-auto" />
+                <div className="h-8 w-px bg-gray-200" />
+                <div>
+                  <div className="label-small">Sistema Escalável</div>
+                  <h1 className="text-lg font-semibold" style={{ color: "#2D3748" }}>
+                    Gerenciamento de Usuários
+                  </h1>
+                </div>
+              </div>
+              <Button
+                onClick={logout}
+                variant="outline"
+                className="flex items-center space-x-2 h-10 px-4 rounded-lg border-gray-200 hover:bg-gray-50 transition-all duration-200"
+                style={{ color: "#718096" }}
+              >
+                <LogOut size={16} />
+                <span>Sair</span>
+              </Button>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
+          <UserManagement onBack={() => setCurrentView("dashboard")} />
+        </main>
+      </div>
+    )
   }
 
   return (
@@ -115,15 +173,26 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
                 </h1>
               </div>
             </div>
-            <Button
-              onClick={logout}
-              variant="outline"
-              className="flex items-center space-x-2 h-10 px-4 rounded-lg border-gray-200 hover:bg-gray-50 transition-all duration-200"
-              style={{ color: "#718096" }}
-            >
-              <LogOut size={16} />
-              <span>Sair</span>
-            </Button>
+            <div className="flex items-center space-x-3">
+              <Button
+                onClick={() => setCurrentView("users")}
+                variant="outline"
+                className="flex items-center space-x-2 h-10 px-4 rounded-lg border-gray-200 hover:bg-gray-50 transition-all duration-200"
+                style={{ color: "#718096" }}
+              >
+                <User size={16} />
+                <span>Usuários</span>
+              </Button>
+              <Button
+                onClick={logout}
+                variant="outline"
+                className="flex items-center space-x-2 h-10 px-4 rounded-lg border-gray-200 hover:bg-gray-50 transition-all duration-200"
+                style={{ color: "#718096" }}
+              >
+                <LogOut size={16} />
+                <span>Sair</span>
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -192,11 +261,15 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
               Acompanhe o progresso de implementação dos seus clientes
             </p>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
             {/* Search */}
             <div className="relative">
-              <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2" style={{ color: "#718096" }} />
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 transform -translate-y-1/2"
+                style={{ color: "#718096" }}
+              />
               <Input
                 placeholder="Buscar cliente..."
                 value={searchTerm}
@@ -252,10 +325,9 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
             <div className="label-small">Nenhum registro</div>
             <h3 className="value-large mb-4">Nenhum cliente encontrado</h3>
             <p className="text-base mb-8" style={{ color: "#718096" }}>
-              {searchTerm || statusFilter !== "all" || sectorFilter !== "all" 
+              {searchTerm || statusFilter !== "all" || sectorFilter !== "all"
                 ? "Tente ajustar os filtros de busca"
-                : "Comece criando seu primeiro cliente no sistema"
-              }
+                : "Comece criando seu primeiro cliente no sistema"}
             </p>
             <Button onClick={onCreateClient} className="btn-primary h-12 px-6">
               <Plus size={16} className="mr-2" />
@@ -293,11 +365,11 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div 
+                      <div
                         className="h-2 rounded-full transition-all duration-300"
-                        style={{ 
+                        style={{
                           width: `${getStepProgress(client.current_step, client.total_steps)}%`,
-                          backgroundColor: "#01D5AC"
+                          backgroundColor: "#01D5AC",
                         }}
                       />
                     </div>
@@ -360,7 +432,7 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
                       style={{ color: "#718096" }}
                     >
                       <Edit size={16} className="mr-2" />
-                      {client.onboarding_status === 'draft' ? 'Continuar' : 'Editar'}
+                      {client.onboarding_status === "draft" ? "Continuar" : "Editar"}
                     </Button>
                     <Button
                       onClick={() => handleDeleteClient(client.id)}
