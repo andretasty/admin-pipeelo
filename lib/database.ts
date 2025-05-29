@@ -507,18 +507,161 @@ export const getDashboardMetrics = async (): Promise<{ success: boolean; data?: 
 export const authenticateUser = async (
   email: string,
   password: string,
-): Promise<{ success: boolean; error?: string }> => {
+): Promise<{ success: boolean; error?: string; user?: any }> => {
   try {
-    if (email === "admin@pipeelo.com" && password === "admin123") {
-      return { success: true }
+    // Hash the provided password
+    const passwordHash = await hashPassword(password)
+
+    // Query the users table
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, name, email, role")
+      .eq("email", email)
+      .eq("password_hash", passwordHash)
+      .maybeSingle()
+
+    if (error) {
+      console.error("Error authenticating user:", error)
+      throw error
     }
 
-    return { success: false, error: "Email ou senha inválidos" }
+    if (data) {
+      return {
+        success: true,
+        user: data,
+      }
+    }
+
+    return {
+      success: false,
+      error: "Email ou senha inválidos",
+    }
   } catch (error: any) {
     console.error("Error authenticating user:", error)
     return {
       success: false,
       error: error.message || "Erro na autenticação",
+    }
+  }
+}
+
+// Create a new user
+export const createUser = async (
+  name: string,
+  email: string,
+  password: string,
+  role = "user",
+  document?: string,
+): Promise<{ success: boolean; error?: string; user?: any }> => {
+  try {
+    // Check if user already exists
+    const { data: existingUser } = await supabase.from("users").select("id").eq("email", email).maybeSingle()
+
+    if (existingUser) {
+      return {
+        success: false,
+        error: "Usuário já existe com este email",
+      }
+    }
+
+    // Hash the password
+    const passwordHash = await hashPassword(password)
+
+    // Create the user
+    const { data, error } = await supabase
+      .from("users")
+      .insert({
+        id: generateUUID(),
+        name,
+        email,
+        password_hash: passwordHash,
+        role,
+        document,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select("id, name, email, role")
+      .single()
+
+    if (error) {
+      console.error("Error creating user:", error)
+      throw error
+    }
+
+    return {
+      success: true,
+      user: data,
+    }
+  } catch (error: any) {
+    console.error("Error creating user:", error)
+    return {
+      success: false,
+      error: error.message || "Erro ao criar usuário",
+    }
+  }
+}
+
+// Get all users (admin only)
+export const getUsers = async (): Promise<{ success: boolean; data?: any[]; error?: string }> => {
+  try {
+    const { data, error } = await supabase
+      .from("users")
+      .select("id, name, email, role, document, created_at, updated_at")
+      .order("created_at", { ascending: false })
+
+    if (error) throw error
+
+    return { success: true, data: data || [] }
+  } catch (error: any) {
+    console.error("Error fetching users:", error)
+    return {
+      success: false,
+      error: error.message || "Erro ao buscar usuários",
+    }
+  }
+}
+
+// Update user password
+export const updateUserPassword = async (
+  userId: string,
+  newPassword: string,
+): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const passwordHash = await hashPassword(newPassword)
+
+    const { error } = await supabase
+      .from("users")
+      .update({
+        password_hash: passwordHash,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId)
+
+    if (error) throw error
+
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error updating password:", error)
+    return {
+      success: false,
+      error: error.message || "Erro ao atualizar senha",
+    }
+  }
+}
+
+// Delete user
+export const deleteUser = async (userId: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { error } = await supabase.from("users").delete().eq("id", userId)
+
+    if (error) throw error
+
+    return { success: true }
+  } catch (error: any) {
+    console.error("Error deleting user:", error)
+    return {
+      success: false,
+      error: error.message || "Erro ao excluir usuário",
     }
   }
 }
