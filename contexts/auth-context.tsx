@@ -28,19 +28,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    console.log("Autenticando usuário:", email)
-    const result = await authenticateUser(email, password)
-    console.log("Resultado da autenticação:", result)
+    try {
+      console.log("Autenticando usuário:", email)
+      const result = await authenticateUser(email, password)
+      console.log("Resultado da autenticação:", result)
 
-    if (result.success && result.user) {
-      const token = `jwt-${result.user.id}-${Date.now()}`
-      setAuthToken(token)
-      setUser(result.user)
-      setIsAuthenticated(true)
-      return true
+      if (result.success && result.user) {
+        const token = `jwt-${result.user.id}-${Date.now()}`
+        setAuthToken(token)
+        setUser(result.user)
+        setIsAuthenticated(true)
+        return true
+      }
+
+      return false
+    } catch (error) {
+      console.error("Erro durante o login:", error)
+      return false
     }
-
-    return false
   }
 
   const logout = () => {

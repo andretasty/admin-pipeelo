@@ -98,12 +98,6 @@ export default function Login() {
             {loading ? "Entrando..." : "Entrar"}
           </Button>
         </form>
-
-        <div className="mt-8 text-center text-xs" style={{ color: "#718096" }}>
-          <div className="label-small mb-2">Credenciais de teste</div>
-          <p>Email: admin@pipeelo.com</p>
-          <p>Senha: admin123</p>
-        </div>
       </div>
     </div>
   )

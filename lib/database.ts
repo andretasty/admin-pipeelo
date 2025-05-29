@@ -1,5 +1,7 @@
 import { getSupabaseClient } from "./supabase"
 import type { Client, DashboardMetrics } from "@/types"
+// Import the password utilities at the top
+import { hashPassword, verifyPassword, needsRehash, validatePasswordStrength } from "./password-utils"
 
 const supabase = getSupabaseClient()
 
@@ -456,7 +458,7 @@ export async function getDashboardMetrics(): Promise<{ success: boolean; data?: 
   }
 }
 
-// CORREÇÃO APLICADA AQUI:
+// Update the authenticateUser function to use password verification
 export async function authenticateUser(
   email: string,
   password: string,
@@ -464,8 +466,7 @@ export async function authenticateUser(
   try {
     console.log("Tentando autenticar usuário:", email)
 
-    // Removido .single() e tratando o array de resultados
-    const { data, error } = await supabase.from("users").select("*").eq("email", email).eq("password_hash", password) // Comparando com password_hash
+    const { data, error } = await supabase.from("users").select("*").eq("email", email)
 
     if (error) {
       console.error("Erro na consulta de autenticação Supabase:", error)
@@ -473,41 +474,79 @@ export async function authenticateUser(
     }
 
     if (!data || data.length === 0) {
-      console.log("Nenhum usuário encontrado com essas credenciais:", email)
+      console.log("Nenhum usuário encontrado com esse email:", email)
       return { success: false, error: "Credenciais inválidas." }
     }
 
     if (data.length > 1) {
-      // Este caso é problemático e pode indicar dados duplicados ou um problema de lógica.
-      console.warn("Múltiplos usuários encontrados com as mesmas credenciais para:", email)
-      // Por segurança, não autenticar se houver ambiguidade.
+      console.warn("Múltiplos usuários encontrados com o mesmo email:", email)
       return { success: false, error: "Erro de configuração: Múltiplos usuários encontrados." }
     }
 
-    // Se chegou aqui, data.length === 1
-    console.log("Usuário autenticado com sucesso:", data[0].email)
-    return { success: true, user: data[0] }
+    const user = data[0]
+
+    // Verify password using bcrypt comparison
+    const isPasswordValid = await verifyPassword(password, user.password_hash)
+
+    if (!isPasswordValid) {
+      console.log("Senha inválida para usuário:", email)
+      return { success: false, error: "Credenciais inválidas." }
+    }
+
+    // Check if password needs rehashing for security upgrade
+    if (needsRehash(user.password_hash)) {
+      console.log("Password needs rehashing for user:", email)
+      try {
+        const newHash = await hashPassword(password)
+        await supabase
+          .from("users")
+          .update({
+            password_hash: newHash,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id)
+        console.log("Password rehashed successfully for user:", email)
+      } catch (rehashError) {
+        console.error("Error rehashing password:", rehashError)
+        // Don't fail login if rehashing fails
+      }
+    }
+
+    console.log("Usuário autenticado com sucesso:", user.email)
+    return { success: true, user }
   } catch (error: any) {
     console.error("Exceção na função authenticateUser:", error)
     return { success: false, error: error.message || "Falha na autenticação." }
   }
 }
 
+// Update the createUser function to hash passwords
 export async function createUser(
   name: string,
   email: string,
-  password: string, // Senha em plain text, será armazenada como password_hash
+  password: string,
   role: string,
   document?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Validate password strength
+    const passwordValidation = validatePasswordStrength(password)
+    if (!passwordValidation.isValid) {
+      return {
+        success: false,
+        error: `Senha não atende aos critérios de segurança: ${passwordValidation.feedback.join(", ")}`,
+      }
+    }
+
+    const hashedPassword = await hashPassword(password)
+
     const { error } = await supabase.from("users").insert({
       id: generateUUID(),
       name,
       email,
-      password_hash: password, // Armazenando a senha diretamente no password_hash
-      role,
+      password_hash: hashedPassword,
       document,
+      role,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
@@ -522,12 +561,24 @@ export async function createUser(
   }
 }
 
+// Update the updateUserPassword function to hash passwords
 export async function updateUserPassword(id: string, password: string): Promise<{ success: boolean; error?: string }> {
   try {
+    // Validate password strength
+    const passwordValidation = validatePasswordStrength(password)
+    if (!passwordValidation.isValid) {
+      return {
+        success: false,
+        error: `Senha não atende aos critérios de segurança: ${passwordValidation.feedback.join(", ")}`,
+      }
+    }
+
+    const hashedPassword = await hashPassword(password)
+
     const { error } = await supabase
       .from("users")
       .update({
-        password_hash: password, // Armazenando a nova senha diretamente no password_hash
+        password_hash: hashedPassword,
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
