@@ -481,3 +481,63 @@ export async function getDashboardMetrics(): Promise<{ success: boolean; data?: 
     return { success: false, error: error.message }
   }
 }
+
+// --- User Management Functions ---
+export async function getUsers(): Promise<{ success: boolean; data?: any[]; error?: string }> {
+  try {
+    const { data, error } = await supabase.from("users").select("*").order("created_at", { ascending: false })
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data }
+  } catch (error: any) {
+    return { success: false, error: error.message || "Unknown error occurred" }
+  }
+}
+
+export async function deleteUser(id: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase.from("users").delete().eq("id", id)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || "Unknown error occurred" }
+  }
+}
+
+export async function updateUserPassword(id: string, password: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Validate password strength
+    const passwordValidation = validatePasswordStrength(password)
+    if (!passwordValidation.isValid) {
+      return {
+        success: false,
+        error: `Senha não atende aos critérios de segurança: ${passwordValidation.feedback.join(", ")}`,
+      }
+    }
+
+    const hashedPassword = await hashPassword(password)
+
+    const { error } = await supabase
+      .from("users")
+      .update({
+        password_hash: hashedPassword,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+
+    if (error) {
+      return { success: false, error: error.message }
+    }
+
+    return { success: true }
+  } catch (error: any) {
+    return { success: false, error: error.message || "Unknown error occurred" }
+  }
+}
