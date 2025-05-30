@@ -1,13 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import type { Client, Tenant, AdminUser, ApiConfig, ERPConfig, PromptConfig, AdvancedConfig } from "@/types"
+import type { Client, Tenant, AdminUser, ApiConfig, ERPConfig, Assistant, AdvancedConfig } from "@/types"
 import { saveClient, updateClientStep, generateUUID } from "@/lib/database"
 import ProgressIndicatorEnhanced from "./progress-indicator-enhanced"
 import Step1TenantData from "./step1-tenant-data"
 import Step2ApiConfig from "./step2-api-config"
 import Step3ERPConfig from "./step3-erp-config"
-import Step4PromptConfig from "./step4-prompt-config"
+import Step4AssistantsConfig from "./step4-assistants-config"
 import Step5FunctionMapping from "./step5-function-mapping"
 import Step6AdvancedConfig from "./step6-advanced-config"
 import Step7ReviewDeploy from "./step7-review-deploy"
@@ -25,7 +25,7 @@ const STEP_TITLES = [
   "Dados do Cliente",
   "Configuração de APIs",
   "Seleção de ERP",
-  "Configuração de Prompts",
+  "Configuração de Assistentes",
   "Mapeamento de Funções",
   "Configurações Avançadas",
   "Revisão e Deploy",
@@ -42,7 +42,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
   const [adminUser, setAdminUser] = useState<AdminUser | undefined>(editingClient?.admin_user)
   const [apiConfig, setApiConfig] = useState<ApiConfig | undefined>(editingClient?.api_config)
   const [erpConfig, setERPConfig] = useState<ERPConfig | undefined>(editingClient?.erp_config)
-  const [promptConfig, setPromptConfig] = useState<PromptConfig | undefined>(editingClient?.prompt_config)
+  const [assistants, setAssistants] = useState<Assistant[]>(editingClient?.assistants || [])
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfig | undefined>(editingClient?.advanced_config)
 
   const handleStepComplete = async (step: number, stepData: any) => {
@@ -65,7 +65,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
           setERPConfig(stepData)
           break
         case 4:
-          setPromptConfig(stepData)
+          setAssistants(stepData)
           break
         case 5:
           // Function mapping updates ERP config
@@ -152,7 +152,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
         admin_user: adminUser!,
         api_config: apiConfig!,
         erp_config: erpConfig,
-        prompt_config: promptConfig,
+        assistants: assistants,
         advanced_config: advancedConfig,
         onboarding_status: "deployed",
         current_step: 7,
@@ -281,9 +281,10 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
           )}
 
           {currentStep === 4 && (
-            <Step4PromptConfig
-              promptConfig={promptConfig}
+            <Step4AssistantsConfig
+              assistants={assistants}
               tenant={tenant}
+              erpConfig={erpConfig}
               onNext={(data) => handleStepComplete(4, data)}
               onBack={handleBack}
               saving={saving}
@@ -314,7 +315,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
               adminUser={adminUser}
               apiConfig={apiConfig}
               erpConfig={erpConfig}
-              promptConfig={promptConfig}
+              assistants={assistants}
               advancedConfig={advancedConfig}
               onDeploy={() => handleStepComplete(7, {})}
               onBack={handleBack}

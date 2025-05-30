@@ -31,8 +31,8 @@ export interface ApiConfig {
   openai_key?: string
   openrouter_key?: string
   api_tests?: {
-    openai_status?: 'pending' | 'success' | 'failed'
-    openrouter_status?: 'pending' | 'success' | 'failed'
+    openai_status?: "pending" | "success" | "failed"
+    openrouter_status?: "pending" | "success" | "failed"
     last_tested?: string
   }
 }
@@ -55,7 +55,7 @@ export interface ERPTemplate {
   commands: ERPCommand[]
   integration_fields: Array<{
     name: string
-    type: 'text' | 'url' | 'password' | 'number'
+    type: "text" | "url" | "password" | "number"
     label: string
     required: boolean
     placeholder?: string
@@ -67,12 +67,12 @@ export interface ERPConfig {
   template_name: string
   fields: Record<string, string>
   enabled_commands: string[]
-  connection_status?: 'pending' | 'connected' | 'failed'
+  connection_status?: "pending" | "connected" | "failed"
   last_tested?: string
 }
 
 export interface AssistantConfig {
-  provider: 'openai' | 'openrouter'
+  provider: "openai" | "openrouter"
   model: string
   temperature: number
   top_p: number
@@ -100,6 +100,19 @@ export interface PromptConfig {
   placeholders_filled: Record<string, string>
 }
 
+// NEW: Assistant interface that combines prompt, functions, and AI config
+export interface Assistant {
+  id: string
+  name: string
+  description?: string
+  prompt_config: PromptConfig
+  enabled_functions: string[] // Array of ERP command names
+  ai_config: AssistantConfig
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface AdvancedConfig {
   categories: string[]
   full_service_enabled: boolean
@@ -109,7 +122,7 @@ export interface AdvancedConfig {
     enabled: boolean
   }>
   backup_settings: {
-    frequency: 'daily' | 'weekly' | 'monthly'
+    frequency: "daily" | "weekly" | "monthly"
     retention_days: number
     enabled: boolean
   }
@@ -121,9 +134,10 @@ export interface Client {
   admin_user: AdminUser
   api_config: ApiConfig
   erp_config?: ERPConfig
-  prompt_config?: PromptConfig
+  // CHANGED: Replace single prompt_config with array of assistants
+  assistants?: Assistant[]
   advanced_config?: AdvancedConfig
-  onboarding_status: 'draft' | 'in_progress' | 'completed' | 'deployed' | 'failed'
+  onboarding_status: "draft" | "in_progress" | "completed" | "deployed" | "failed"
   current_step: number
   total_steps: number
   created_at: string
