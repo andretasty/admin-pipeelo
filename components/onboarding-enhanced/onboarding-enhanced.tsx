@@ -1,14 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import type { Client, Tenant, AdminUser, ApiConfig, ERPConfig, PromptConfig, AdvancedConfig } from "@/types"
+import { useState, useEffect } from "react" // Adicionado useEffect
+import type { Client, Tenant, AdminUser, ApiConfig, ERPConfig, AdvancedConfig, Assistant } from "@/types" // Adicionado Assistant
 import { saveClient, updateClientStep } from "@/lib/database"
 import { generateUUID } from "@/lib/utils"
 import ProgressIndicatorEnhanced from "./progress-indicator-enhanced"
 import Step1TenantData from "./step1-tenant-data"
 import Step2ApiConfig from "./step2-api-config"
 import Step3ERPConfig from "./step3-erp-config"
-import Step4PromptConfig from "./step4-prompt-config"
+// Step4PromptConfig agora é Step4AssistantsConfig
+import Step4AssistantsConfig from "./step4-assistants-config" // Renomeado
 import Step5FunctionMapping from "./step5-function-mapping"
 import Step6AdvancedConfig from "./step6-advanced-config"
 import Step7ReviewDeploy from "./step7-review-deploy"
@@ -26,7 +27,7 @@ const STEP_TITLES = [
   "Dados do Cliente",
   "Configuração de APIs",
   "Seleção de ERP",
-  "Configuração de Prompts",
+  "Configuração de Assistentes", // Título atualizado
   "Mapeamento de Funções",
   "Configurações Avançadas",
   "Revisão e Deploy",
@@ -43,81 +44,89 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
   const [adminUser, setAdminUser] = useState<AdminUser | undefined>(editingClient?.admin_user)
   const [apiConfig, setApiConfig] = useState<ApiConfig | undefined>(editingClient?.api_config)
   const [erpConfig, setERPConfig] = useState<ERPConfig | undefined>(editingClient?.erp_config)
-  const [promptConfig, setPromptConfig] = useState<PromptConfig | undefined>(editingClient?.prompt_config)
+  // promptConfig é agora uma lista de assistants
+  const [assistants, setAssistants] = useState<Assistant[]>(editingClient?.assistants || [])
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfig | undefined>(editingClient?.advanced_config)
+
+  useEffect(() => {
+    if (editingClient) {
+      setClientId(editingClient.id)
+      setTenant(editingClient.tenant)
+      setAdminUser(editingClient.admin_user)
+      setApiConfig(editingClient.api_config)
+      setERPConfig(editingClient.erp_config)
+      setAssistants(editingClient.assistants || []) // Garante que assistants seja um array
+      setAdvancedConfig(editingClient.advanced_config)
+      setCurrentStep(editingClient.current_step || 1)
+    }
+  }, [editingClient])
 
   const handleStepComplete = async (step: number, stepData: any) => {
     setSaving(true)
     setError(null)
 
     try {
-      console.log(`Processing step ${step}:`, stepData)
+      let clientDataForUpdate: Partial<Client> = {}
 
-      // Update local state based on step
       switch (step) {
         case 1:
           setTenant(stepData.tenant)
           setAdminUser(stepData.adminUser)
+          clientDataForUpdate = { tenant: stepData.tenant, admin_user: stepData.adminUser }
           break
         case 2:
           setApiConfig(stepData)
+          clientDataForUpdate = { api_config: stepData }
           break
         case 3:
           setERPConfig(stepData)
+          clientDataForUpdate = { erp_config: stepData }
           break
-        case 4:
-          setPromptConfig(stepData)
+        case 4: // Agora é para Assistants
+          setAssistants(stepData) // stepData deve ser um array de Assistant
+          clientDataForUpdate = { assistants: stepData }
           break
         case 5:
-          // Function mapping updates ERP config
-          setERPConfig(stepData)
+          setERPConfig((prev) => ({ ...prev, ...stepData })) // Assume que stepData são atualizações para erpConfig
+          clientDataForUpdate = { erp_config: { ...erpConfig, ...stepData } }
           break
         case 6:
           setAdvancedConfig(stepData)
+          clientDataForUpdate = { advanced_config: stepData }
           break
         case 7:
-          // Final deployment
           await handleFinalDeploy()
-          return
+          return // Sai da função após o deploy
       }
 
-      // Save to database
       if (clientId) {
-        // Update existing client step
-        console.log(`Updating step for client ${clientId}`)
-        const result = await updateClientStep(clientId, step + 1, stepData)
+        const result = await updateClientStep(clientId, step + 1, clientDataForUpdate)
         if (!result.success) {
-          throw new Error(result.error || "Erro ao atualizar etapa")
+          throw new Error(result.error || "Erro ao atualizar etapa do cliente")
         }
       } else if (step === 1) {
-        // Create new client after first step with proper UUID
         const newClientId = generateUUID()
-        console.log(`Creating new client with ID: ${newClientId}`)
-
         const newClient: Client = {
           id: newClientId,
-          tenant: stepData.tenant,
-          admin_user: stepData.adminUser,
-          api_config: { api_tests: {} },
+          tenant: tenant!, // tenant e adminUser foram setados acima
+          admin_user: adminUser!,
+          api_config: apiConfig || { api_tests: {} }, // Garante que api_config exista
+          assistants: assistants, // Inicializa assistants
           onboarding_status: "in_progress",
           current_step: 2,
           total_steps: 7,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         }
-
         const result = await saveClient(newClient)
         if (result.success && result.data) {
           setClientId(result.data.id)
-          console.log(`Client created successfully with ID: ${result.data.id}`)
         } else {
-          throw new Error(result.error || "Erro ao criar cliente")
+          throw new Error(result.error || "Erro ao criar novo cliente")
         }
       }
 
-      // Move to next step
       setCurrentStep(step + 1)
-      console.log(`Successfully moved to step ${step + 1}`)
     } catch (error: any) {
       console.error("Error saving step:", error)
       setError(error.message || "Erro ao salvar progresso. Tente novamente.")
@@ -127,60 +136,56 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
   }
 
   const handleFinalDeploy = async () => {
-    if (!clientId) {
-      throw new Error("ID do cliente não encontrado")
+    if (!clientId || !tenant || !adminUser || !apiConfig) {
+      // Adicionado !apiConfig
+      setError("Dados essenciais do cliente não estão completos para o deploy.")
+      return
     }
-
+    setSaving(true)
+    setError(null)
     try {
-      console.log("Starting final deployment...")
-
-      // Create final client object
-      const finalClient: Client = {
+      const finalClientData: Client = {
         id: clientId,
-        tenant: tenant!,
-        admin_user: adminUser!,
-        api_config: apiConfig!,
+        tenant: tenant,
+        admin_user: adminUser,
+        api_config: apiConfig,
         erp_config: erpConfig,
-        prompt_config: promptConfig,
+        assistants: assistants, // Salva a lista de assistentes
         advanced_config: advancedConfig,
         onboarding_status: "deployed",
-        current_step: 7,
+        current_step: 7, // Ou o número total de etapas
         total_steps: 7,
         created_at: editingClient?.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString(),
         deployed_at: new Date().toISOString(),
-        deployment_url: `https://${tenant?.name.toLowerCase().replace(/\s+/g, "-")}.pipeelo.com`,
+        deployment_url: `https://${tenant.name.toLowerCase().replace(/\s+/g, "-")}.pipeelo.com`,
       }
 
-      console.log("Final client data:", finalClient)
-
-      const result = await saveClient(finalClient)
+      const result = await saveClient(finalClientData)
       if (result.success) {
-        console.log("Deployment successful!")
         onComplete()
       } else {
-        throw new Error(result.error || "Erro no deploy")
+        throw new Error(result.error || "Erro ao realizar o deploy final do cliente")
       }
     } catch (error: any) {
-      console.error("Error deploying:", error)
-      throw error
+      console.error("Error deploying client:", error)
+      setError(error.message || "Erro desconhecido durante o deploy.")
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleBack = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1)
-      setError(null)
+      setError(null) // Limpa o erro ao voltar
     }
   }
 
-  const clearError = () => {
-    setError(null)
-  }
+  const clearError = () => setError(null)
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F8F9FA" }}>
-      {/* Header */}
       <header style={{ backgroundColor: "#FFFFFF" }} className="border-b border-gray-100">
         <div className="max-w-6xl mx-auto px-6 lg:px-8">
           <div className="flex justify-between items-center h-20">
@@ -212,16 +217,14 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
         </div>
       </header>
 
-      {/* Main Content */}
       <main className="max-w-6xl mx-auto px-6 lg:px-8 py-8">
         <ProgressIndicatorEnhanced currentStep={currentStep} totalSteps={7} stepTitles={STEP_TITLES} />
 
-        {/* Error Display */}
         {error && (
           <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
             <div className="flex justify-between items-start">
               <div>
-                <h3 className="text-red-800 font-medium">Erro ao salvar progresso</h3>
+                <h3 className="text-red-800 font-medium">Erro</h3>
                 <p className="text-red-700 text-sm mt-1">{error}</p>
               </div>
               <Button onClick={clearError} variant="ghost" size="sm" className="text-red-600 hover:text-red-800">
@@ -232,7 +235,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
         )}
 
         <div className="card-subtle p-8">
-          {currentStep === 1 && (
+          {currentStep === 1 && tenant && adminUser && (
             <Step1TenantData
               tenant={tenant}
               adminUser={adminUser}
@@ -240,6 +243,10 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
               saving={saving}
             />
           )}
+          {currentStep === 1 &&
+            !editingClient && ( // Para novo cliente, inicializa se não houver editingClient
+              <Step1TenantData onNext={(data) => handleStepComplete(1, data)} saving={saving} />
+            )}
 
           {currentStep === 2 && (
             <Step2ApiConfig
@@ -259,11 +266,12 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
             />
           )}
 
-          {currentStep === 4 && (
-            <Step4PromptConfig
-              promptConfig={promptConfig}
-              tenant={tenant}
-              onNext={(data) => handleStepComplete(4, data)}
+          {currentStep === 4 && ( // Step4AssistantsConfig
+            <Step4AssistantsConfig
+              initialAssistants={assistants} // Passa a lista de assistentes
+              tenant={tenant} // Necessário para placeholders
+              // erpConfig={erpConfig} // Se Step4AssistantsConfig precisar de erpConfig
+              onNext={(data) => handleStepComplete(4, data)} // data deve ser Assistant[]
               onBack={handleBack}
               saving={saving}
             />
@@ -271,7 +279,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
 
           {currentStep === 5 && (
             <Step5FunctionMapping
-              erpConfig={erpConfig}
+              erpConfig={erpConfig} // Passa o erpConfig para ser atualizado
               onNext={(data) => handleStepComplete(5, data)}
               onBack={handleBack}
               saving={saving}
@@ -287,19 +295,22 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingClient
             />
           )}
 
-          {currentStep === 7 && (
-            <Step7ReviewDeploy
-              tenant={tenant}
-              adminUser={adminUser}
-              apiConfig={apiConfig}
-              erpConfig={erpConfig}
-              promptConfig={promptConfig}
-              advancedConfig={advancedConfig}
-              onDeploy={() => handleStepComplete(7, {})}
-              onBack={handleBack}
-              saving={saving}
-            />
-          )}
+          {currentStep === 7 &&
+            tenant &&
+            adminUser &&
+            apiConfig && ( // Garante que dados essenciais existam
+              <Step7ReviewDeploy
+                tenant={tenant}
+                adminUser={adminUser}
+                apiConfig={apiConfig}
+                erpConfig={erpConfig}
+                assistants={assistants} // Passa a lista de assistentes para revisão
+                advancedConfig={advancedConfig}
+                onDeploy={() => handleStepComplete(7, {})}
+                onBack={handleBack}
+                saving={saving}
+              />
+            )}
         </div>
       </main>
     </div>
