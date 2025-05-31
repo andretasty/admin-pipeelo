@@ -52,14 +52,29 @@ export class ExternalApiClient {
     return results;
   }
 
+  private getCsrfToken(): string | null {
+    if (typeof document === 'undefined') {
+      return null; // Not in a browser environment
+    }
+    const tokenElement = document.querySelector('meta[name="csrf-token"]');
+    return tokenElement ? tokenElement.getAttribute('content') : null;
+  }
+
   async createTenantAccount(data: TenantData) {
     const url = this.baseUrl + "/tenants";
+    const csrfToken = this.getCsrfToken();
+    const headers: HeadersInit = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    };
+
+    if (csrfToken) {
+      headers['X-CSRF-TOKEN'] = csrfToken;
+    }
+
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
+      headers: headers,
       body: JSON.stringify(data),
     });
 
