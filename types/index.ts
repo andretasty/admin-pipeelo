@@ -104,7 +104,6 @@ export interface PromptTemplate {
   sector?: string
   content: string
   placeholders: string[]
-  variables?: Record<string, string>
 }
 
 export interface PromptConfig {

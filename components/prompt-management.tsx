@@ -44,7 +44,6 @@ export default function PromptManagement({ onBack }: PromptManagementProps) {
     sector: "",
     content: "",
     placeholders: [],
-    variables: {},
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
@@ -164,7 +163,6 @@ export default function PromptManagement({ onBack }: PromptManagementProps) {
       sector: "",
       content: "",
       placeholders: [],
-      variables: {},
     })
     setFormErrors({})
   }
@@ -178,7 +176,6 @@ export default function PromptManagement({ onBack }: PromptManagementProps) {
       sector: prompt.sector || "",
       content: prompt.content,
       placeholders: prompt.placeholders,
-      variables: prompt.variables,
     })
     setShowEditDialog(true)
   }

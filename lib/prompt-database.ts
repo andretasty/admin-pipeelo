@@ -19,7 +19,7 @@ function dbRowToPromptTemplate(row: any): PromptTemplate {
     sector: row.sector || "",
     content: row.content || "",
     placeholders: Array.isArray(row.placeholders) ? row.placeholders : [],
-    variables: row.variables || {},
+    // variables: row.variables || {}, // Removed
   }
 }
 
@@ -52,7 +52,7 @@ export const createPromptTemplate = async (
         sector: promptData.sector || null,
         content: promptData.content,
         placeholders: promptData.placeholders || [],
-        variables: promptData.variables || {},
+        // variables: promptData.variables || {}, // Removed
         is_active: true,
       })
       .select()
@@ -90,7 +90,7 @@ export const updatePromptTemplate = async (promptData: PromptTemplate): Promise<
         sector: promptData.sector || null,
         content: promptData.content,
         placeholders: promptData.placeholders || [],
-        variables: promptData.variables || {},
+        // variables: promptData.variables || {}, // Removed
         updated_at: new Date().toISOString(),
       })
       .eq("id", promptData.id)
