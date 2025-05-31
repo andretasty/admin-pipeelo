@@ -16,16 +16,17 @@ import {
   LogOut,
   Building2,
   User,
-  Key,
   Search,
   Clock,
   AlertCircle,
   Users,
   Target,
   Zap,
+  MessageSquare,
 } from "lucide-react"
 import Image from "next/image"
 import UserManagement from "./user-management"
+import PromptManagement from "./prompt-management"
 
 interface DashboardEnhancedProps {
   onCreateClient: () => void
@@ -41,7 +42,7 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [sectorFilter, setSectorFilter] = useState<string>("all")
   const { logout } = useAuth()
-  const [currentView, setCurrentView] = useState<"dashboard" | "users">("dashboard")
+  const [currentView, setCurrentView] = useState<"dashboard" | "users" | "prompts">("dashboard")
 
   useEffect(() => {
     fetchData()
@@ -57,19 +58,19 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
     if (searchTerm) filters.search = searchTerm
 
     try {
-      const { data: tenantsResult, error: tenantsError } = await getTenants(filters);
+      const { data: tenantsResult, error: tenantsError } = await getTenants(filters)
 
       if (tenantsError) {
-        throw new Error(tenantsError);
+        throw new Error(tenantsError)
       }
 
       const tenantsWithProgress = await Promise.all(
         (tenantsResult || []).map(async (tenant) => {
-          const { data: progress } = await getOnboardingProgress(tenant.id);
-          return { ...tenant, onboardingProgress: progress };
-        })
-      );
-      setTenants(tenantsWithProgress);
+          const { data: progress } = await getOnboardingProgress(tenant.id)
+          return { ...tenant, onboardingProgress: progress }
+        }),
+      )
+      setTenants(tenantsWithProgress)
 
       // TODO: Refactor getDashboardMetrics to work with new schema
       // For now, setting dummy metrics or fetching if available
@@ -79,21 +80,30 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
       // } else {
       //   setMetrics(metricsData);
       // }
-      setMetrics({ // Dummy data for now
+      setMetrics({
+        // Dummy data for now
         total_clients: tenantsWithProgress.length,
-        completed_onboardings: tenantsWithProgress.filter(t => t.onboardingProgress?.onboarding_status === "deployed").length,
-        in_progress: tenantsWithProgress.filter(t => t.onboardingProgress?.onboarding_status === "in_progress").length,
+        completed_onboardings: tenantsWithProgress.filter((t) => t.onboardingProgress?.onboarding_status === "deployed")
+          .length,
+        in_progress: tenantsWithProgress.filter((t) => t.onboardingProgress?.onboarding_status === "in_progress")
+          .length,
         average_completion_time: 0, // Placeholder
-        success_rate: tenantsWithProgress.length > 0 ? Math.round((tenantsWithProgress.filter(t => t.onboardingProgress?.onboarding_status === "deployed").length / tenantsWithProgress.length) * 100) : 0,
-        failed_deployments: tenantsWithProgress.filter(t => t.onboardingProgress?.onboarding_status === "failed").length,
-      });
-
-
+        success_rate:
+          tenantsWithProgress.length > 0
+            ? Math.round(
+                (tenantsWithProgress.filter((t) => t.onboardingProgress?.onboarding_status === "deployed").length /
+                  tenantsWithProgress.length) *
+                  100,
+              )
+            : 0,
+        failed_deployments: tenantsWithProgress.filter((t) => t.onboardingProgress?.onboarding_status === "failed")
+          .length,
+      })
     } catch (err: any) {
-      console.error("Error fetching dashboard data:", err);
-      setError(err.message || "Erro ao carregar dados do dashboard.");
+      console.error("Error fetching dashboard data:", err)
+      setError(err.message || "Erro ao carregar dados do dashboard.")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
   }
 
@@ -155,19 +165,38 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
               <div>
                 <div className="label-small">Gerenciamento de clientes</div>
                 <h1 className="text-lg font-semibold" style={{ color: "#2D3748" }}>
-                  {currentView === "users" ? "Gerenciamento de Usuários" : "Dashboard"}
+                  {currentView === "users"
+                    ? "Gerenciamento de Usuários"
+                    : currentView === "prompts"
+                      ? "Gerenciamento de Prompts"
+                      : "Dashboard"}
                 </h1>
               </div>
             </div>
             <div className="flex items-center space-x-3">
               <Button
-                onClick={() => setCurrentView(currentView === "users" ? "dashboard" : "users")}
+                onClick={() => setCurrentView("prompts")}
+                variant="outline"
+                className="flex items-center space-x-2 h-10 px-4 rounded-lg border-gray-200 hover:bg-gray-50 transition-all duration-200"
+                style={{ color: "#718096" }}
+              >
+                <MessageSquare size={16} />
+                <span>Prompts</span>
+              </Button>
+              <Button
+                onClick={() =>
+                  setCurrentView(
+                    currentView === "users" ? "dashboard" : currentView === "prompts" ? "dashboard" : "users",
+                  )
+                }
                 variant="outline"
                 className="flex items-center space-x-2 h-10 px-4 rounded-lg border-gray-200 hover:bg-gray-50 transition-all duration-200"
                 style={{ color: "#718096" }}
               >
                 <User size={16} />
-                <span>{currentView === "users" ? "Dashboard" : "Usuários"}</span>
+                <span>
+                  {currentView === "users" ? "Dashboard" : currentView === "prompts" ? "Dashboard" : "Usuários"}
+                </span>
               </Button>
               <Button
                 onClick={logout}
@@ -187,6 +216,8 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
       <main className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
         {currentView === "users" ? (
           <UserManagement onBack={() => setCurrentView("dashboard")} />
+        ) : currentView === "prompts" ? (
+          <PromptManagement onBack={() => setCurrentView("dashboard")} />
         ) : (
           <>
             {/* Metrics Cards */}
@@ -327,55 +358,55 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
             ) : (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {tenants.map((tenantItem) => {
-                  const tenantData = tenantItem as Tenant;
-                  const progressData = tenantItem.onboardingProgress as OnboardingProgress | undefined;
+                  const tenantData = tenantItem as Tenant
+                  const progressData = tenantItem.onboardingProgress as OnboardingProgress | undefined
                   return (
-                  <Card key={tenantData.id} className="card-subtle hover:opacity-95">
-                    <CardHeader className="pb-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex-1">
-                          <div className="label-small">Cliente</div>
-                          <h3 className="text-lg font-semibold mb-1" style={{ color: "#2D3748" }}>
-                            {tenantData.name}
-                          </h3>
-                          <p className="text-sm" style={{ color: "#718096" }}>
-                            {tenantData.document}
-                          </p>
+                    <Card key={tenantData.id} className="card-subtle hover:opacity-95">
+                      <CardHeader className="pb-4">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="flex-1">
+                            <div className="label-small">Cliente</div>
+                            <h3 className="text-lg font-semibold mb-1" style={{ color: "#2D3748" }}>
+                              {tenantData.name}
+                            </h3>
+                            <p className="text-sm" style={{ color: "#718096" }}>
+                              {tenantData.document}
+                            </p>
+                          </div>
+                          {progressData && (
+                            <Badge className={getStatusColor(progressData.onboarding_status)}>
+                              {getStatusLabel(progressData.onboarding_status)}
+                            </Badge>
+                          )}
                         </div>
+
+                        {/* Progress Bar */}
                         {progressData && (
-                          <Badge className={getStatusColor(progressData.onboarding_status)}>
-                            {getStatusLabel(progressData.onboarding_status)}
-                          </Badge>
+                          <div className="mt-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <span className="text-xs font-medium" style={{ color: "#718096" }}>
+                                Progresso
+                              </span>
+                              <span className="text-xs font-medium" style={{ color: "#2D3748" }}>
+                                {progressData.current_step}/{progressData.total_steps}
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2">
+                              <div
+                                className="h-2 rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${getStepProgress(progressData.current_step, progressData.total_steps)}%`,
+                                  backgroundColor: "#01D5AC",
+                                }}
+                              />
+                            </div>
+                          </div>
                         )}
-                      </div>
+                      </CardHeader>
 
-                      {/* Progress Bar */}
-                      {progressData && (
-                        <div className="mt-4">
-                          <div className="flex justify-between items-center mb-2">
-                            <span className="text-xs font-medium" style={{ color: "#718096" }}>
-                              Progresso
-                            </span>
-                            <span className="text-xs font-medium" style={{ color: "#2D3748" }}>
-                              {progressData.current_step}/{progressData.total_steps}
-                            </span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                              className="h-2 rounded-full transition-all duration-300"
-                              style={{
-                                width: `${getStepProgress(progressData.current_step, progressData.total_steps)}%`,
-                                backgroundColor: "#01D5AC",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </CardHeader>
-
-                    <CardContent className="pt-0">
-                      {/* TODO: Fetch and display ERP config if needed */}
-                      {/* <div className="space-y-3 mb-6">
+                      <CardContent className="pt-0">
+                        {/* TODO: Fetch and display ERP config if needed */}
+                        {/* <div className="space-y-3 mb-6">
                         {erpConfig && ( // This needs to be fetched per tenant
                           <div className="flex items-center space-x-3">
                             <Key size={16} style={{ color: "#718096" }} />
@@ -389,35 +420,35 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
                         )}
                       </div> */}
 
-                      <div className="flex space-x-3 pt-4 border-t border-gray-100">
-                        <Button
-                          onClick={() => onEditClient(tenantData)}
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 h-10 rounded-lg border-gray-200 hover:bg-gray-50 transition-all duration-200"
-                          style={{ color: "#718096" }}
-                        >
-                          <Edit size={16} className="mr-2" />
-                          {progressData?.onboarding_status === "draft" ? "Continuar" : "Editar"}
-                        </Button>
-                        <Button
-                          onClick={() => handleDeleteTenant(tenantData.id)}
-                          variant="outline"
-                          size="sm"
-                          className="h-10 px-4 rounded-lg border-red-200 text-red-600 hover:bg-red-50 transition-all duration-200"
-                        >
-                          <Trash2 size={16} />
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </>
-      )}
-    </main>
-  </div>
-)
+                        <div className="flex space-x-3 pt-4 border-t border-gray-100">
+                          <Button
+                            onClick={() => onEditClient(tenantData)}
+                            variant="outline"
+                            size="sm"
+                            className="flex-1 h-10 rounded-lg border-gray-200 hover:bg-gray-50 transition-all duration-200"
+                            style={{ color: "#718096" }}
+                          >
+                            <Edit size={16} className="mr-2" />
+                            {progressData?.onboarding_status === "draft" ? "Continuar" : "Editar"}
+                          </Button>
+                          <Button
+                            onClick={() => handleDeleteTenant(tenantData.id)}
+                            variant="outline"
+                            size="sm"
+                            className="h-10 px-4 rounded-lg border-red-200 text-red-600 hover:bg-red-50 transition-all duration-200"
+                          >
+                            <Trash2 size={16} />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </main>
+    </div>
+  )
 }
