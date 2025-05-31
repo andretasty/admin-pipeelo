@@ -20,11 +20,9 @@ export default function RootLayout({
     <html lang="pt-BR">
       <head>
         {/*
-          ATENÇÃO: O valor do 'content' desta meta tag DEVE ser preenchido dinamicamente
-          pelo seu backend com o token CSRF gerado para a sessão atual.
-          Um valor fixo ou ausente resultará em erro de "CSRF token mismatch".
+          Meta CSRF removida: a API pública não exige token de verificação.
+          Caso o backend utilize CSRF, insira a meta tag dinamicamente no build.
         */}
-        <meta name="csrf-token" content="SEU_TOKEN_CSRF_GERADO_PELO_BACKEND" />
       </head>
       <body className={inter.className}>{children}</body>
     </html>
