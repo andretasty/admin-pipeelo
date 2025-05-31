@@ -142,8 +142,20 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
 
         // Create tenant account in external API
         await externalApiClient.createTenantAccount({
-          tenant: newTenantData,
-          user: newUserData,
+          tenant: {
+            ...newTenantData,
+            document: newTenantData.document.replace(/\D/g, ""),
+            phone_number: newTenantData.phone_number.replace(/\D/g, ""),
+            address: {
+              ...newAddressData,
+              postal_code: newAddressData.postal_code.replace(/\D/g, ""),
+            },
+          },
+          user: {
+            ...newUserData,
+            password: newUserData.password_hash,
+            document: newUserData.document.replace(/\D/g, ""),
+          },
           gateway: "STRIPE",
         });
         setLogMessages((logs) => [...logs, "Conta criada com sucesso no sistema externo."]);
