@@ -42,7 +42,7 @@ export default function Login() {
           <div className="flex justify-center element-spacing">
             <Image src="/pipeelo-logo.png" alt="Pipeelo" width={200} height={60} className="h-12 w-auto" />
           </div>
-          <div className="label-small">Sistema de Configuração</div>
+          <div className="label-small">Painel de administração</div>
           <h1 className="value-large">Acesso ao Painel</h1>
           <p className="text-sm mt-2" style={{ color: "#718096" }}>
             Entre com suas credenciais para acessar

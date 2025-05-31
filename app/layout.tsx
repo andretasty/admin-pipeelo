@@ -6,7 +6,7 @@ import "./globals.css"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Pipeelo - Sistema de Configuração SaaS",
+  title: "Pipeelo - Painel de administração",
   description: "Painel de configuração e gerenciamento de clientes SaaS",
     generator: 'v0.dev'
 }

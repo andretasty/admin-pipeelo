@@ -131,7 +131,7 @@ export default function Dashboard({ onCreateClient, onEditClient }: DashboardPro
             <div className="label-small">Nenhum registro</div>
             <h3 className="value-large mb-4">Nenhum cliente cadastrado</h3>
             <p className="text-base mb-8" style={{ color: "#718096" }}>
-              Comece criando seu primeiro cliente no sistema
+              Comece criando seu primeiro cliente
             </p>
             <Button onClick={onCreateClient} className="btn-primary h-12 px-6">
               <Plus size={16} className="mr-2" />

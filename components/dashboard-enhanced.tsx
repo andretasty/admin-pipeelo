@@ -153,9 +153,9 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
               <Image src="/pipeelo-logo.png" alt="Pipeelo" width={120} height={36} className="h-10 w-auto" />
               <div className="h-8 w-px bg-gray-200" />
               <div>
-                <div className="label-small">Sistema Escalável</div>
+                <div className="label-small">Gerenciamento de clientes</div>
                 <h1 className="text-lg font-semibold" style={{ color: "#2D3748" }}>
-                  {currentView === "users" ? "Gerenciamento de Usuários" : "Dashboard de Onboarding"}
+                  {currentView === "users" ? "Gerenciamento de Usuários" : "Dashboard"}
                 </h1>
               </div>
             </div>
