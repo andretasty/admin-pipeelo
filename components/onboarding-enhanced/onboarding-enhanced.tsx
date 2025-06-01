@@ -19,6 +19,7 @@ import {
   getAdvancedConfiguration,
   getOnboardingProgress,
   generateUUID,
+  updateTenantPipeeloToken,
 } from "@/lib/database"
 import { getSupabaseClient } from "@/lib/supabase"
 import { ExternalApiClient } from "@/lib/external-api"
@@ -160,6 +161,14 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
         });
         setLogMessages((logs) => [...logs, "Conta criada com sucesso no sistema externo."]);
 
+        // Authenticate and obtain permanent token
+        setLogMessages((logs) => [...logs, "Obtendo token permanente..."]);
+        const loginResp = await externalApiClient.login(newUserData.email, newUserData.password_hash);
+        const tempToken = (loginResp.token as string).split("|")[1] || loginResp.token;
+        const permanentResp = await externalApiClient.getPermanentToken(tempToken);
+        const pipeeloToken = permanentResp.token as string;
+        setLogMessages((logs) => [...logs, "Token permanente obtido."]);
+
         // Save Address
         const { success: addressSuccess, data: savedAddress, error: addressError } = await saveAddress(newAddressData);
         if (!addressSuccess || !savedAddress) {
@@ -176,6 +185,12 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
         setTenant(savedTenant);
         currentTenantId = savedTenant.id;
         setTenantId(savedTenant.id); // Set tenantId for subsequent steps
+
+        // Save permanent token in tenant record
+        const { success: tokenSuccess, error: tokenError } = await updateTenantPipeeloToken(savedTenant.id, pipeeloToken);
+        if (!tokenSuccess) {
+          throw new Error(tokenError || "Erro ao salvar token permanente.");
+        }
 
         // Create User (admin user for the tenant)
         const userToCreate: User = { ...newUserData, tenant_id: savedTenant.id } as User;

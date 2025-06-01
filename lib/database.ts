@@ -227,6 +227,25 @@ export async function deleteTenant(id: string): Promise<{ success: boolean; erro
   }
 }
 
+export async function updateTenantPipeeloToken(id: string, token: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await supabase
+      .from("tenants")
+      .update({ pipeelo_token: token, updated_at: new Date().toISOString() })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Supabase error during updateTenantPipeeloToken:", error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error updating tenant pipeelo token:", error);
+    return { success: false, error: error.message || "Unknown error occurred" };
+  }
+}
+
 // --- API_CONFIGURATIONS CRUD ---
 export async function saveApiConfiguration(config: ApiConfiguration): Promise<{ success: boolean; data?: ApiConfiguration; error?: string }> {
   try {
