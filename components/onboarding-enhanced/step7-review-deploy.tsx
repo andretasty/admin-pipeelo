@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import type { Tenant, User, ApiConfiguration, ErpConfiguration, PromptConfig, AdvancedConfiguration, Assistant } from "@/types"
+import type { Tenant, User, ApiConfiguration, ErpConfiguration, AdvancedConfiguration, Assistant } from "@/types"
 import { CheckCircle, User as UserIcon, Building2, Key, Settings, MessageSquare, Zap, Bot } from 'lucide-react'
 
 interface Step7Props {
@@ -77,7 +77,7 @@ export default function Step7ReviewDeploy({
               <div className="space-y-2 text-sm">
                 <div><strong>Nome:</strong> {adminUser?.name}</div>
                 <div><strong>Email:</strong> {adminUser?.email}</div>
-                <div><strong>CPF:</strong> {adminUser?.document_number}</div>
+                <div><strong>CPF:</strong> {adminUser?.document}</div>
               </div>
             </CardContent>
           </Card>

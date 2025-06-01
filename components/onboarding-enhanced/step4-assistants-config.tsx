@@ -11,14 +11,15 @@ import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { Assistant, Tenant, PromptTemplate, ERPConfig } from "@/types"
-import { getPromptTemplates, fillPromptPlaceholders } from "@/lib/prompt-templates"
+import type { Assistant, Tenant, PromptTemplate, ErpConfiguration, Prompt, Function, AssistantConfig } from "@/types"
+import { getPromptTemplates } from "@/lib/prompt-templates" // Removed fillPromptPlaceholders
 import { Plus, Edit, Trash2, Bot, Settings, FileText, Zap } from "lucide-react"
+import { createPrompt, fetchPromptsForTenant, createFunction, fetchFunctionsForTenant, saveAssistant } from "@/lib/api-utils"
 
 interface Step4Props {
   assistants?: Assistant[]
   tenant?: Tenant
-  erpConfig?: ERPConfig
+  erpConfig?: ErpConfiguration
   onNext: (assistants: Assistant[]) => void
   onBack: () => void
   saving?: boolean
@@ -38,15 +39,53 @@ export default function Step4AssistantsConfig({
   const [showAssistantForm, setShowAssistantForm] = useState(false)
   const [loading, setLoading] = useState(true)
 
+  interface AssistantFormState {
+    name: string;
+    description: string;
+    selectedPromptId: string | null;
+    newPrompt: {
+      name: string;
+      description: string;
+      content: string;
+      templateId: string | null;
+    };
+    isCreatingNewPrompt: boolean;
+    selectedFunctionIds: string[];
+    newFunction: {
+      name: string;
+      description: string;
+      schema: string;
+    };
+    isCreatingNewFunction: boolean;
+    aiConfig: AssistantConfig;
+  }
+
   // Form state for creating/editing assistant
-  const [assistantForm, setAssistantForm] = useState({
+  const [assistantForm, setAssistantForm] = useState<AssistantFormState>({
     name: "",
     description: "",
-    selectedTemplate: "",
-    placeholders: {} as Record<string, string>,
-    enabledFunctions: [] as string[],
+    // Para o Prompt
+    selectedPromptId: null,
+    newPrompt: {
+      name: "",
+      description: "",
+      content: "",
+      templateId: null,
+    },
+    isCreatingNewPrompt: false,
+
+    // Para as Funções
+    selectedFunctionIds: [],
+    newFunction: {
+      name: "",
+      description: "",
+      schema: "", // Schema em string JSON
+    },
+    isCreatingNewFunction: false,
+
+    // Configurações de IA (mantém-se)
     aiConfig: {
-      provider: "openai" as const,
+      provider: "openai",
       model: "gpt-4",
       temperature: 0.7,
       top_p: 1.0,
@@ -56,14 +95,31 @@ export default function Step4AssistantsConfig({
     },
   })
 
+  // Novos estados para armazenar prompts e funções disponíveis para seleção
+  const [availablePrompts, setAvailablePrompts] = useState<Prompt[]>([])
+  const [availableFunctions, setAvailableFunctions] = useState<Function[]>([])
+
   useEffect(() => {
-    const fetchTemplates = async () => {
+    const fetchData = async () => {
+      setLoading(true)
       const fetchedTemplates = await getPromptTemplates()
       setTemplates(fetchedTemplates)
+
+      if (tenant?.id) {
+        try {
+          const fetchedPrompts = await fetchPromptsForTenant(tenant.id)
+          setAvailablePrompts(fetchedPrompts)
+          const fetchedFunctions = await fetchFunctionsForTenant(tenant.id)
+          setAvailableFunctions(fetchedFunctions)
+        } catch (error) {
+          console.error("Erro ao buscar prompts ou funções:", error)
+          // Tratar erro, talvez exibir uma mensagem para o usuário
+        }
+      }
       setLoading(false)
     }
-    fetchTemplates()
-  }, [])
+    fetchData()
+  }, [tenant])
 
   const generateAssistantId = () => {
     return `assistant_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -73,9 +129,21 @@ export default function Step4AssistantsConfig({
     setAssistantForm({
       name: "",
       description: "",
-      selectedTemplate: "",
-      placeholders: {},
-      enabledFunctions: [],
+      selectedPromptId: null,
+      newPrompt: {
+        name: "",
+        description: "",
+        content: "",
+        templateId: null,
+      },
+      isCreatingNewPrompt: false,
+      selectedFunctionIds: [],
+      newFunction: {
+        name: "",
+        description: "",
+        schema: "",
+      },
+      isCreatingNewFunction: false,
       aiConfig: {
         provider: "openai",
         model: "gpt-4",
@@ -96,14 +164,20 @@ export default function Step4AssistantsConfig({
 
   const handleEditAssistant = (assistant: Assistant) => {
     setEditingAssistant(assistant)
-    setAssistantForm({
+    // TODO: Ao editar, precisamos carregar o prompt e as funções associadas
+    // Isso exigirá uma lógica mais complexa para preencher o formulário
+    // com base nos IDs do prompt e das funções.
+    // Por enquanto, vamos preencher apenas o básico.
+    setAssistantForm((prev) => ({
+      ...prev,
       name: assistant.name,
       description: assistant.description || "",
-      selectedTemplate: assistant.prompt_config.template_id,
-      placeholders: assistant.prompt_config.placeholders_filled,
-      enabledFunctions: assistant.enabled_functions,
+      selectedPromptId: assistant.prompt_id, // Usar o novo prompt_id
+      selectedFunctionIds: [], // TODO: Precisamos buscar as funções associadas ao assistente
       aiConfig: assistant.ai_config,
-    })
+      isCreatingNewPrompt: false, // Assume que estamos editando um prompt existente
+      isCreatingNewFunction: false, // Assume que estamos editando funções existentes
+    }))
     setShowAssistantForm(true)
   }
 
@@ -113,42 +187,104 @@ export default function Step4AssistantsConfig({
     }
   }
 
-  const handleSaveAssistant = () => {
-    const template = templates.find((t) => t.id === assistantForm.selectedTemplate)
-    if (!template || !assistantForm.name.trim()) {
-      alert("Por favor, preencha o nome do assistente e selecione um template.")
+  const handleSaveAssistant = async () => { // Tornar a função assíncrona
+    if (!tenant?.id) {
+      alert("Tenant ID não disponível. Não é possível salvar o assistente.");
+      return;
+    }
+
+    // 1. Validar nome do assistente
+    if (!assistantForm.name.trim()) {
+      alert("Por favor, preencha o nome do assistente.")
       return
     }
 
-    const finalContent = fillPromptPlaceholders(template, assistantForm.placeholders)
+    let finalPromptId: string | null = null;
+    let finalFunctionIds: string[] = [];
 
+    // 2. Lógica para o Prompt
+    if (assistantForm.isCreatingNewPrompt) {
+      // Validar novo prompt
+      if (!assistantForm.newPrompt.name.trim() || !assistantForm.newPrompt.content.trim()) {
+        alert("Por favor, preencha o nome e o conteúdo do novo prompt.")
+        return
+      }
+      try {
+        const newPrompt = await createPrompt({
+          tenant_id: tenant.id,
+          name: assistantForm.newPrompt.name,
+          description: assistantForm.newPrompt.description,
+          content: assistantForm.newPrompt.content,
+          prompt_template_id: assistantForm.newPrompt.templateId,
+        });
+        finalPromptId = newPrompt.id;
+      } catch (error) {
+        console.error("Erro ao criar prompt:", error);
+        alert("Erro ao criar prompt. Verifique o console.");
+        return;
+      }
+    } else {
+      // Usar prompt existente
+      if (!assistantForm.selectedPromptId) {
+        alert("Por favor, selecione um prompt existente.")
+        return
+      }
+      finalPromptId = assistantForm.selectedPromptId;
+    }
+
+    // 3. Lógica para as Funções
+    if (assistantForm.isCreatingNewFunction) {
+      // Validar nova função
+      if (!assistantForm.newFunction.name.trim() || !assistantForm.newFunction.schema.trim()) {
+        alert("Por favor, preencha o nome e o schema da nova função.")
+        return
+      }
+      try {
+        const newFunc = await createFunction({
+          tenant_id: tenant.id,
+          name: assistantForm.newFunction.name,
+          description: assistantForm.newFunction.description,
+          schema: JSON.parse(assistantForm.newFunction.schema), // Parse JSON string
+        });
+        finalFunctionIds.push(newFunc.id);
+      } catch (error) {
+        console.error("Erro ao criar função:", error);
+        alert("Erro ao criar função. Verifique o console.");
+        return;
+      }
+    }
+    // Adicionar funções selecionadas (se houver)
+    finalFunctionIds = [...finalFunctionIds, ...assistantForm.selectedFunctionIds];
+
+
+    // 4. Construir o objeto Assistant para salvar
     const assistantData: Assistant = {
       id: editingAssistant?.id || generateAssistantId(),
+      tenant_id: tenant.id,
       name: assistantForm.name.trim(),
       description: assistantForm.description.trim(),
-      prompt_config: {
-        template_id: template.id,
-        template_name: template.name,
-        final_content: finalContent,
-        assistant_config: assistantForm.aiConfig,
-        placeholders_filled: assistantForm.placeholders,
-      },
-      enabled_functions: assistantForm.enabledFunctions,
+      prompt_id: finalPromptId!, // Usar o ID do prompt final
       ai_config: assistantForm.aiConfig,
-      enabled: true,
+      enabled: true, // Ou um campo de formulário para isso
       created_at: editingAssistant?.created_at || new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }
 
-    if (editingAssistant) {
-      setCurrentAssistants((prev) => prev.map((a) => (a.id === editingAssistant.id ? assistantData : a)))
-    } else {
-      setCurrentAssistants((prev) => [...prev, assistantData])
+    // 5. Chamar API para salvar/atualizar o assistente
+    try {
+      const savedAssistant = await saveAssistant(assistantData, finalFunctionIds);
+      if (editingAssistant) {
+        setCurrentAssistants((prev) => prev.map((a) => (a.id === editingAssistant.id ? savedAssistant : a)))
+      } else {
+        setCurrentAssistants((prev) => [...prev, savedAssistant])
+      }
+      setShowAssistantForm(false)
+      resetForm()
+      setEditingAssistant(null)
+    } catch (error) {
+      console.error("Erro ao salvar assistente:", error);
+      alert("Erro ao salvar assistente. Verifique o console.");
     }
-
-    setShowAssistantForm(false)
-    resetForm()
-    setEditingAssistant(null)
   }
 
   const handleSubmit = () => {
@@ -159,10 +295,12 @@ export default function Step4AssistantsConfig({
     onNext(currentAssistants)
   }
 
-  const selectedTemplate = templates.find((t) => t.id === assistantForm.selectedTemplate)
-  const finalContent = selectedTemplate ? fillPromptPlaceholders(selectedTemplate, assistantForm.placeholders) : ""
+  // Removido: selectedTemplate e finalContent baseados em template antigo
+  // const selectedTemplate = templates.find((t) => t.id === assistantForm.selectedTemplate)
+  // const finalContent = selectedTemplate ? fillPromptPlaceholders(selectedTemplate, assistantForm.placeholders) : ""
 
-  const availableFunctions = erpConfig?.enabled_commands || []
+  // Removido: availableFunctions baseado em erpConfig.enabled_commands
+  // const availableFunctions = erpConfig?.enabled_commands || []
 
   if (loading) {
     return (
@@ -225,47 +363,91 @@ export default function Step4AssistantsConfig({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="card-subtle">
                 <CardContent className="p-6 space-y-4">
-                  <div>
-                    <Label>Template de Prompt</Label>
-                    <Select
-                      value={assistantForm.selectedTemplate}
-                      onValueChange={(value) => setAssistantForm((prev) => ({ ...prev, selectedTemplate: value }))}
-                    >
-                      <SelectTrigger className="mt-1">
-                        <SelectValue placeholder="Selecione o template" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {templates.map((template) => (
-                          <SelectItem key={template.id} value={template.id}>
-                            {template.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  {/* Toggle para Criar Novo ou Selecionar Existente */}
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={assistantForm.isCreatingNewPrompt}
+                      onCheckedChange={(checked) => setAssistantForm((prev) => ({ ...prev, isCreatingNewPrompt: checked }))}
+                    />
+                    <Label>{assistantForm.isCreatingNewPrompt ? "Criar Novo Prompt" : "Selecionar Prompt Existente"}</Label>
                   </div>
 
-                  {selectedTemplate && (
+                  {assistantForm.isCreatingNewPrompt ? (
+                    // UI para Criar Novo Prompt
                     <div className="space-y-4">
-                      <p className="text-sm" style={{ color: "#718096" }}>
-                        {selectedTemplate.description}
-                      </p>
-
-                      {selectedTemplate.placeholders.map((placeholder) => (
-                        <div key={placeholder}>
-                          <Label>{placeholder.replace(/_/g, " ")}</Label>
-                          <Textarea
-                            value={assistantForm.placeholders[placeholder] || ""}
-                            onChange={(e) =>
-                              setAssistantForm((prev) => ({
-                                ...prev,
-                                placeholders: { ...prev.placeholders, [placeholder]: e.target.value },
-                              }))
-                            }
-                            placeholder={`Digite o valor para ${placeholder}`}
-                            className="mt-1 min-h-[80px]"
-                          />
-                        </div>
-                      ))}
+                      <div>
+                        <Label>Nome do Prompt</Label>
+                        <Input
+                          value={assistantForm.newPrompt.name}
+                          onChange={(e) => setAssistantForm((prev) => ({ ...prev, newPrompt: { ...prev.newPrompt, name: e.target.value } }))}
+                          placeholder="Ex: Prompt de Atendimento ao Cliente"
+                        />
+                      </div>
+                      <div>
+                        <Label>Descrição do Prompt (opcional)</Label>
+                        <Textarea
+                          value={assistantForm.newPrompt.description}
+                          onChange={(e) => setAssistantForm((prev) => ({ ...prev.newPrompt, description: e.target.value } as any))}
+                          placeholder="Descreva a finalidade deste prompt"
+                        />
+                      </div>
+                      <div>
+                        <Label>Template de Prompt (opcional)</Label>
+                        <Select
+                          value={assistantForm.newPrompt.templateId || ""}
+                          onValueChange={(value) => {
+                            const selectedTemplate = templates.find((t) => t.id === value);
+                            setAssistantForm((prev) => ({
+                              ...prev,
+                              newPrompt: {
+                                ...prev.newPrompt,
+                                templateId: value,
+                                content: selectedTemplate ? selectedTemplate.content : prev.newPrompt.content, // Preenche o conteúdo
+                              },
+                            }));
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione um template para usar como base" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {templates.map((template) => (
+                              <SelectItem key={template.id} value={template.id}>
+                                {template.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label>Conteúdo do Prompt</Label>
+                        <Textarea
+                          value={assistantForm.newPrompt.content}
+                          onChange={(e) => setAssistantForm((prev) => ({ ...prev.newPrompt, content: e.target.value } as any))}
+                          placeholder="Insira o conteúdo do prompt aqui..."
+                          className="min-h-[150px]"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    // UI para Selecionar Prompt Existente
+                    <div>
+                      <Label>Selecionar Prompt</Label>
+                      <Select
+                        value={assistantForm.selectedPromptId || ""}
+                        onValueChange={(value) => setAssistantForm((prev) => ({ ...prev, selectedPromptId: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione um prompt existente" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availablePrompts.map((prompt) => (
+                            <SelectItem key={prompt.id} value={prompt.id}>
+                              {prompt.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
                 </CardContent>
@@ -276,7 +458,7 @@ export default function Step4AssistantsConfig({
                   <Label>Preview do Prompt</Label>
                   <div className="bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto mt-1">
                     <pre className="text-sm whitespace-pre-wrap" style={{ color: "#2D3748" }}>
-                      {finalContent || "Selecione um template para visualizar"}
+                      {assistantForm.isCreatingNewPrompt ? assistantForm.newPrompt.content : availablePrompts.find(p => p.id === assistantForm.selectedPromptId)?.content || "Selecione ou crie um prompt para visualizar"}
                     </pre>
                   </div>
                 </CardContent>
@@ -286,34 +468,78 @@ export default function Step4AssistantsConfig({
 
           <TabsContent value="functions" className="space-y-4">
             <Card className="card-subtle">
-              <CardContent className="p-6">
-                <Label>Funções Disponíveis</Label>
-                <p className="text-sm text-gray-600 mb-4">Selecione quais funções ERP este assistente pode executar</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {availableFunctions.map((functionName) => (
-                    <div key={functionName} className="flex items-center space-x-2">
-                      <Switch
-                        checked={assistantForm.enabledFunctions.includes(functionName)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setAssistantForm((prev) => ({
-                              ...prev,
-                              enabledFunctions: [...prev.enabledFunctions, functionName],
-                            }))
-                          } else {
-                            setAssistantForm((prev) => ({
-                              ...prev,
-                              enabledFunctions: prev.enabledFunctions.filter((f) => f !== functionName),
-                            }))
-                          }
-                        }}
-                      />
-                      <Label className="text-sm">{functionName}</Label>
-                    </div>
-                  ))}
+              <CardContent className="p-6 space-y-4">
+                {/* Toggle para Criar Nova ou Selecionar Existente */}
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    checked={assistantForm.isCreatingNewFunction}
+                    onCheckedChange={(checked) => setAssistantForm((prev) => ({ ...prev, isCreatingNewFunction: checked }))}
+                  />
+                  <Label>{assistantForm.isCreatingNewFunction ? "Criar Nova Função" : "Selecionar Funções Existentes"}</Label>
                 </div>
-                {availableFunctions.length === 0 && (
-                  <p className="text-sm text-gray-500">Nenhuma função ERP disponível. Configure o ERP primeiro.</p>
+
+                {assistantForm.isCreatingNewFunction ? (
+                  // UI para Criar Nova Função
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Nome da Função</Label>
+                      <Input
+                        value={assistantForm.newFunction.name}
+                        onChange={(e) => setAssistantForm((prev) => ({ ...prev.newFunction, name: e.target.value } as any))}
+                        placeholder="Ex: get_customer_info"
+                      />
+                    </div>
+                    <div>
+                      <Label>Descrição da Função (opcional)</Label>
+                      <Textarea
+                        value={assistantForm.newFunction.description}
+                        onChange={(e) => setAssistantForm((prev) => ({ ...prev.newFunction, description: e.target.value } as any))}
+                        placeholder="Descreva o que esta função faz"
+                      />
+                    </div>
+                    <div>
+                      <Label>Schema da Função (JSON)</Label>
+                      <Textarea
+                        value={assistantForm.newFunction.schema}
+                        onChange={(e) => setAssistantForm((prev) => ({ ...prev.newFunction, schema: e.target.value } as any))}
+                        placeholder={`{\n  "type": "object",\n  "properties": {\n    "param1": { "type": "string" }\n  }\n}`}
+                        className="min-h-[150px] font-mono"
+                      />
+                      {/* TODO: Adicionar validação de JSON */}
+                    </div>
+                  </div>
+                ) : (
+                  // UI para Selecionar Funções Existentes
+                  <div>
+                    <Label>Funções Disponíveis</Label>
+                    <p className="text-sm text-gray-600 mb-4">Selecione quais funções este assistente pode executar</p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {availableFunctions.map((func) => (
+                        <div key={func.id} className="flex items-center space-x-2">
+                          <Switch
+                            checked={assistantForm.selectedFunctionIds.includes(func.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setAssistantForm((prev) => ({
+                                  ...prev,
+                                  selectedFunctionIds: [...prev.selectedFunctionIds, func.id],
+                                }))
+                              } else {
+                                setAssistantForm((prev) => ({
+                                  ...prev,
+                                  selectedFunctionIds: prev.selectedFunctionIds.filter((fId) => fId !== func.id),
+                                }))
+                              }
+                            }}
+                          />
+                          <Label className="text-sm">{func.name}</Label>
+                        </div>
+                      ))}
+                    </div>
+                    {availableFunctions.length === 0 && (
+                      <p className="text-sm text-gray-500">Nenhuma função disponível. Crie uma nova ou configure o ERP.</p>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -498,66 +724,73 @@ export default function Step4AssistantsConfig({
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {currentAssistants.map((assistant) => (
-              <Card key={assistant.id} className="card-subtle">
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <h4 className="font-semibold" style={{ color: "#2D3748" }}>
-                        {assistant.name}
-                      </h4>
-                      {assistant.description && (
-                        <p className="text-sm mt-1" style={{ color: "#718096" }}>
-                          {assistant.description}
-                        </p>
-                      )}
+            {currentAssistants.map((assistant) => {
+              const assistantPrompt = availablePrompts.find(p => p.id === assistant.prompt_id);
+              const promptName = assistantPrompt ? assistantPrompt.name : "Prompt não encontrado";
+              // TODO: Fetch functions associated with this assistant for display
+              const functionsCount = "N/A"; // Placeholder for now
+
+              return (
+                <Card key={assistant.id} className="card-subtle">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div className="flex-1">
+                        <h4 className="font-semibold" style={{ color: "#2D3748" }}>
+                          {assistant.name}
+                        </h4>
+                        {assistant.description && (
+                          <p className="text-sm mt-1" style={{ color: "#718096" }}>
+                            {assistant.description}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant="secondary">{assistant.enabled ? "Ativo" : "Inativo"}</Badge>
                     </div>
-                    <Badge variant="secondary">{assistant.enabled ? "Ativo" : "Inativo"}</Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <FileText size={14} style={{ color: "#718096" }} />
-                      <span className="text-sm" style={{ color: "#718096" }}>
-                        {assistant.prompt_config.template_name}
-                      </span>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-2">
+                        <FileText size={14} style={{ color: "#718096" }} />
+                        <span className="text-sm" style={{ color: "#718096" }}>
+                          {promptName}
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Zap size={14} style={{ color: "#718096" }} />
+                        <span className="text-sm" style={{ color: "#718096" }}>
+                          {functionsCount} funções
+                        </span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Settings size={14} style={{ color: "#718096" }} />
+                        <span className="text-sm" style={{ color: "#718096" }}>
+                          {assistant.ai_config.model} (T: {assistant.ai_config.temperature})
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Zap size={14} style={{ color: "#718096" }} />
-                      <span className="text-sm" style={{ color: "#718096" }}>
-                        {assistant.enabled_functions.length} funções
-                      </span>
+                    <div className="flex space-x-2 mt-4 pt-3 border-t border-gray-100">
+                      <Button
+                        onClick={() => handleEditAssistant(assistant)}
+                        variant="outline"
+                        size="sm"
+                        className="flex-1"
+                      >
+                        <Edit size={14} className="mr-1" />
+                        Editar
+                      </Button>
+                      <Button
+                        onClick={() => handleDeleteAssistant(assistant.id)}
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                      </Button>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Settings size={14} style={{ color: "#718096" }} />
-                      <span className="text-sm" style={{ color: "#718096" }}>
-                        {assistant.ai_config.model} (T: {assistant.ai_config.temperature})
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex space-x-2 mt-4 pt-3 border-t border-gray-100">
-                    <Button
-                      onClick={() => handleEditAssistant(assistant)}
-                      variant="outline"
-                      size="sm"
-                      className="flex-1"
-                    >
-                      <Edit size={14} className="mr-1" />
-                      Editar
-                    </Button>
-                    <Button
-                      onClick={() => handleDeleteAssistant(assistant.id)}
-                      variant="outline"
-                      size="sm"
-                      className="text-red-600 border-red-200 hover:bg-red-50"
-                    >
-                      <Trash2 size={14} />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
+                  </CardContent>
+                </Card>
+              )
+            })}
           </div>
         )}
       </div>

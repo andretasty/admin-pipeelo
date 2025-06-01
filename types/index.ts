@@ -109,12 +109,27 @@ export interface PromptTemplate {
   placeholders: string[]
 }
 
-export interface PromptConfig {
-  template_id: string
-  template_name: string
-  final_content: string
-  assistant_config: AssistantConfig
-  placeholders_filled: Record<string, string>
+// New Prompt interface
+export interface Prompt {
+  id: string
+  tenant_id: string
+  name: string
+  description?: string
+  content: string
+  prompt_template_id?: string // Optional: reference to the original template
+  created_at: string
+  updated_at: string
+}
+
+// New Function interface
+export interface Function {
+  id: string
+  tenant_id: string
+  name: string
+  description?: string
+  schema: Record<string, any> // Using Record<string, any> for JSONB schema
+  created_at: string
+  updated_at: string
 }
 
 export interface Assistant {
@@ -122,8 +137,7 @@ export interface Assistant {
   tenant_id: string
   name: string
   description?: string
-  prompt_config: PromptConfig // This can be a JSONB field in DB
-  enabled_functions: string[]
+  prompt_id: string // Changed from prompt_config
   ai_config: AssistantConfig // This can be a JSONB field in DB
   enabled: boolean
   created_at: string
