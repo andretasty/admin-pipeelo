@@ -191,15 +191,22 @@ export async function getTenants(filters?: any): Promise<{ success: boolean; dat
 export async function deleteTenant(id: string): Promise<{ success: boolean; error?: string }> {
   try {
     // First, get the tenant to retrieve the address_id
+    let tenant: TenantAddressId | null = null;
     const { data: rawTenant, error: getTenantError } = await supabase.from("tenants").select("id, address_id").eq("id", id).single();
-    const tenant = rawTenant as unknown as TenantAddressId;
     
     if (getTenantError) {
       console.error("Error getting tenant for deletion:", getTenantError);
       // Continue with deletion even if we can't get the tenant
     }
     
-    const addressId: string | undefined = tenant?.address_id !== null ? (tenant?.address_id as string | undefined) : undefined;
+    if (rawTenant) {
+      tenant = rawTenant as TenantAddressId;
+    }
+    
+    let addressId: string | undefined;
+    if (tenant && tenant.address_id) {
+      addressId = tenant.address_id;
+    }
     
     // Delete all related records first to satisfy foreign key constraints
     // Delete all related records first to satisfy foreign key constraints
@@ -412,22 +419,49 @@ export async function getAssistants(tenantId: string): Promise<{ success: boolea
 
 export async function getAssistantsWithFunctions(tenantId: string): Promise<{ success: boolean; data?: AssistantWithFunctions[]; error?: string }> {
   try {
-    const { data, error } = await supabase
+    // Fetch all assistants for the tenant
+    const { data: assistantsRawData, error: assistantsError } = await supabase
       .from('assistants')
-      .select('*, assistant_functions(function_id)')
+      .select('*')
       .eq('tenant_id', tenantId)
       .order('name');
-    if (error) {
-      console.error('Supabase error during getAssistantsWithFunctions:', error);
-      return { success: false, error: error.message };
+
+    if (assistantsError) {
+      console.error('Supabase error during getAssistants (for functions):', assistantsError);
+      return { success: false, error: assistantsError.message };
     }
-    const mapped = (data as any[]).map((row) => ({
-      ...(row as any),
-      function_ids: Array.isArray(row.assistant_functions)
-        ? row.assistant_functions.map((af: any) => af.function_id)
-        : [],
-    }));
-    return { success: true, data: mapped as AssistantWithFunctions[] };
+    const assistantsData: Assistant[] = assistantsRawData as any as Assistant[];
+
+    // Fetch all assistant-function associations for the tenant's assistants
+    const assistantIds = assistantsData.map(a => a.id);
+    let assistantFunctionsData: { assistant_id: string; function_id: string; }[] = [];
+
+    if (assistantIds.length > 0) {
+      const { data: afRawData, error: afError } = await supabase
+        .from('assistant_functions')
+        .select('assistant_id, function_id')
+        .in('assistant_id', assistantIds);
+
+      if (afError) {
+        console.error('Supabase error during getAssistantFunctions:', afError);
+        return { success: false, error: afError.message };
+      }
+      assistantFunctionsData = afRawData as Array<{ assistant_id: string; function_id: string; }>;
+    }
+
+    // Map function_ids to their respective assistants
+    const mappedAssistants: AssistantWithFunctions[] = assistantsData.map(assistant => {
+      const functionsForAssistant = assistantFunctionsData
+        .filter(af => af.assistant_id === assistant.id)
+        .map(af => af.function_id);
+
+      return {
+        ...assistant,
+        function_ids: functionsForAssistant,
+      };
+    });
+
+    return { success: true, data: mappedAssistants };
   } catch (error: any) {
     console.error('Error getting assistants with functions:', error);
     return { success: false, error: error.message || 'Unknown error occurred' };
