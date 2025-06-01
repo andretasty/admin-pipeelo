@@ -85,4 +85,61 @@ export class ExternalApiClient {
 
     return response.json();
   }
+
+  async login(email: string, password: string) {
+    const url = this.baseUrl + "/auth/login";
+    const headers: HeadersInit = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: "Bearer juZDRV3tKwjYQi3okvieXFPiOXpXkiinYUnnVXCC83f84a00",
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(
+        "Failed to login: " +
+          response.status +
+          " " +
+          response.statusText +
+          " - " +
+          errorBody
+      );
+    }
+
+    return response.json();
+  }
+
+  async getPermanentToken(token: string) {
+    const url = this.baseUrl + "/permanent-token";
+    const headers: HeadersInit = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(
+        "Failed to obtain permanent token: " +
+          response.status +
+          " " +
+          response.statusText +
+          " - " +
+          errorBody
+      );
+    }
+
+    return response.json();
+  }
 }

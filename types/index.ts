@@ -18,6 +18,7 @@ export interface Tenant {
   website?: string
   sector?: string // Made nullable based on previous feedback
   address_id?: string // Link to Address table
+  pipeelo_token?: string
   created_at: string
   updated_at: string
 }
