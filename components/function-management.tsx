@@ -31,7 +31,7 @@ interface FunctionManagementProps {
 
 export default function FunctionManagement({ onBack }: FunctionManagementProps) {
   const { user } = useAuth()
-  const tenantId = user?.tenant_id
+  const tenantId = user?.tenant_id || user?.id // Usar o ID do usuário como tenant_id se não houver tenant_id específico
 
   const [functions, setFunctions] = useState<Function[]>([])
   const [loading, setLoading] = useState(true)
@@ -59,7 +59,7 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
     setError(null)
 
     if (!tenantId) {
-      setError("Tenant ID não encontrado")
+      setError("Usuário não autenticado")
       setLoading(false)
       return
     }
@@ -94,7 +94,12 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
   }
 
   const handleCreateFunction = async () => {
-    if (!validateForm() || !tenantId) return
+    if (!validateForm() || !tenantId) {
+      if (!tenantId) {
+        setFormErrors({ submit: "Usuário não autenticado" })
+      }
+      return
+    }
 
     setSaving(true)
     try {
@@ -135,7 +140,12 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
   }
 
   const handleUpdateFunction = async () => {
-    if (!validateForm() || !selectedFunction) return
+    if (!validateForm() || !tenantId) {
+      if (!tenantId) {
+        setFormErrors({ submit: "Usuário não autenticado" })
+      }
+      return
+    }
 
     setSaving(true)
     try {
@@ -239,15 +249,6 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
   })
 
   // Show loading or error if no tenant
-  if (!tenantId) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-center">
-          <p style={{ color: "#718096" }}>Erro: Tenant não encontrado</p>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-6">
