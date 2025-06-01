@@ -28,10 +28,16 @@ interface TenantData {
 export class ExternalApiClient {
   private baseUrl: string;
   private queue: Array<() => Promise<any>>;
+  private authToken: string | null;
 
   constructor(baseUrl: string = API_BASE_URL) {
     this.baseUrl = baseUrl;
     this.queue = [];
+    this.authToken = null;
+  }
+
+  setAuthToken(token: string) {
+    this.authToken = token;
   }
 
   enqueueRequest(requestFn: () => Promise<any>) {
@@ -60,17 +66,27 @@ export class ExternalApiClient {
     return tokenElement ? tokenElement.getAttribute('content') : null;
   }
 
-  async createTenantAccount(data: TenantData) {
-    const url = this.baseUrl + "/tenants";
-    const csrfToken = this.getCsrfToken();
+  private buildHeaders(): HeadersInit {
     const headers: HeadersInit = {
       Accept: "application/json",
       "Content-Type": "application/json",
     };
 
-    if (csrfToken) {
-      headers['X-CSRF-TOKEN'] = csrfToken;
+    if (this.authToken) {
+      headers["Authorization"] = `Bearer ${this.authToken}`;
     }
+
+    const csrfToken = this.getCsrfToken();
+    if (csrfToken) {
+      headers["X-CSRF-TOKEN"] = csrfToken;
+    }
+
+    return headers;
+  }
+
+  async createTenantAccount(data: TenantData) {
+    const url = this.baseUrl + "/tenants";
+    const headers = this.buildHeaders();
 
     const response = await fetch(url, {
       method: "POST",
@@ -86,58 +102,37 @@ export class ExternalApiClient {
     return response.json();
   }
 
-  async login(email: string, password: string) {
-    const url = this.baseUrl + "/auth/login";
-    const headers: HeadersInit = {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: "Bearer juZDRV3tKwjYQi3okvieXFPiOXpXkiinYUnnVXCC83f84a00",
-    };
-
-    const response = await fetch(url, {
+  async updateOpenAI(token: string) {
+    if (!this.authToken) {
+      throw new Error("Authorization token not set");
+    }
+    const response = await fetch(`${this.baseUrl}/openai`, {
       method: "POST",
-      headers,
-      body: JSON.stringify({ email, password }),
+      headers: this.buildHeaders(),
+      body: JSON.stringify({ token }),
     });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
-        "Failed to login: " +
-          response.status +
-          " " +
-          response.statusText +
-          " - " +
-          errorBody
-      );
+      throw new Error(`Failed to update OpenAI key: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
     return response.json();
   }
 
-  async getPermanentToken(token: string) {
-    const url = this.baseUrl + "/permanent-token";
-    const headers: HeadersInit = {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    };
-
-    const response = await fetch(url, {
+  async updateOpenRouter(token: string) {
+    if (!this.authToken) {
+      throw new Error("Authorization token not set");
+    }
+    const response = await fetch(`${this.baseUrl}/open-router`, {
       method: "POST",
-      headers,
+      headers: this.buildHeaders(),
+      body: JSON.stringify({ token }),
     });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
-        "Failed to obtain permanent token: " +
-          response.status +
-          " " +
-          response.statusText +
-          " - " +
-          errorBody
-      );
+      throw new Error(`Failed to update OpenRouter key: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
     return response.json();
