@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import type { Tenant, User, Address, ApiConfiguration, ErpConfiguration, Assistant, AdvancedConfiguration, OnboardingProgress } from "@/types"
+import type { Tenant, User, Address, ApiConfiguration, ErpConfiguration, Assistant, AdvancedConfiguration, OnboardingProgress, AssistantWithFunctions } from "@/types"
 import {
   saveAddress,
   saveTenant,
   saveApiConfiguration,
   saveErpConfiguration,
-  saveAssistant,
+  saveAssistantWithFunctions,
   saveAdvancedConfiguration,
   saveOnboardingProgress,
   createUser,
@@ -15,7 +15,7 @@ import {
   getAddress,
   getApiConfiguration,
   getErpConfiguration,
-  getAssistants,
+  getAssistantsWithFunctions,
   getAdvancedConfiguration,
   getOnboardingProgress,
   generateUUID,
@@ -80,7 +80,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
   }, [tenant])
   const [apiConfig, setApiConfig] = useState<ApiConfiguration | undefined>(undefined)
   const [erpConfig, setERPConfig] = useState<ErpConfiguration | undefined>(undefined)
-  const [assistants, setAssistants] = useState<Assistant[]>([])
+  const [assistants, setAssistants] = useState<AssistantWithFunctions[]>([])
   const [advancedConfig, setAdvancedConfig] = useState<AdvancedConfiguration | undefined>(undefined)
   const [onboardingProgress, setOnboardingProgress] = useState<OnboardingProgress | undefined>(undefined)
 
@@ -111,7 +111,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
           const { data: fetchedErpConfig } = await getErpConfiguration(editingTenantId)
           setERPConfig(fetchedErpConfig)
 
-          const { data: fetchedAssistants } = await getAssistants(editingTenantId)
+          const { data: fetchedAssistants } = await getAssistantsWithFunctions(editingTenantId)
           setAssistants(fetchedAssistants || [])
 
           const { data: fetchedAdvancedConfig } = await getAdvancedConfiguration(editingTenantId)
@@ -305,12 +305,11 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
             }
             break;
           case 4:
-            // Assistants are an array, need to handle individually or as a batch
-            // For simplicity, assuming stepData is an array of assistants
-            const assistantsToSave: Assistant[] = stepData.map((a: Assistant) => ({ ...a, tenant_id: currentTenantId }));
+            // Assistants are an array with associated functions
+            const assistantsToSave: AssistantWithFunctions[] = stepData.map((a: AssistantWithFunctions) => ({ ...a, tenant_id: currentTenantId }));
             for (const assistantItem of assistantsToSave) {
-              const { success: assistantSuccess, error: assistantError } = await saveAssistant(assistantItem);
-              if (!assistantSuccess) throw new Error(assistantError || `Erro ao salvar assistente ${assistantItem.name}.`);
+              const { success: assistantSuccess, error: assistantError, data: saved } = await saveAssistantWithFunctions(assistantItem, assistantItem.function_ids);
+              if (!assistantSuccess || !saved) throw new Error(assistantError || `Erro ao salvar assistente ${assistantItem.name}.`);
             }
             setAssistants(assistantsToSave);
             break;
