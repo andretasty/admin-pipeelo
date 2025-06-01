@@ -23,12 +23,16 @@ import { Plus, Trash2, Edit, Tag, Eye, Code } from "lucide-react"
 import type { Function } from "@/types"
 import { useToast } from "@/hooks/use-toast"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useAuth } from "@/contexts/auth-context"
 
 interface FunctionManagementProps {
   onBack: () => void
 }
 
 export default function FunctionManagement({ onBack }: FunctionManagementProps) {
+  const { user } = useAuth()
+  const tenantId = user?.tenant_id
+
   const [functions, setFunctions] = useState<Function[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -48,15 +52,19 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
 
   useEffect(() => {
     fetchFunctions()
-  }, [])
+  }, [tenantId])
 
   const fetchFunctions = async () => {
     setLoading(true)
     setError(null)
 
+    if (!tenantId) {
+      setError("Tenant ID não encontrado")
+      setLoading(false)
+      return
+    }
+
     try {
-      // Assumindo que temos um tenant_id disponível - você pode precisar ajustar isso
-      const tenantId = "your-tenant-id" // TODO: Obter o tenant_id do contexto ou props
       const result = await getFunctions(tenantId)
 
       if (result.success && result.data) {
@@ -86,11 +94,10 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
   }
 
   const handleCreateFunction = async () => {
-    if (!validateForm()) return
+    if (!validateForm() || !tenantId) return
 
     setSaving(true)
     try {
-      const tenantId = "your-tenant-id" // TODO: Obter o tenant_id do contexto ou props
       const functionData = {
         ...formData,
         tenant_id: tenantId,
@@ -230,6 +237,17 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
       func.description?.toLowerCase().includes(searchTerm.toLowerCase())
     )
   })
+
+  // Show loading or error if no tenant
+  if (!tenantId) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-center">
+          <p style={{ color: "#718096" }}>Erro: Tenant não encontrado</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">

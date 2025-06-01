@@ -578,15 +578,29 @@ export async function getPrompts(tenantId: string): Promise<{ success: boolean; 
 export async function saveFunction(func: Function): Promise<{ success: boolean; data?: Function; error?: string }> {
   try {
     const id = func.id || generateUUID()
+
+    // Prepare data for database insertion
+    const functionData = {
+      id,
+      tenant_id: func.tenant_id,
+      name: func.name,
+      description: func.description,
+      schema: func.schema, // This will be stored as JSONB
+      created_at: func.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
     const { data: rawData, error } = await supabase
       .from("functions")
-      .upsert({ ...func, id }, { onConflict: "id" })
+      .upsert(functionData, { onConflict: "id" })
       .select()
       .single()
+
     if (error) {
       console.error("Supabase error during saveFunction:", error)
       return { success: false, error: error.message }
     }
+
     const data = rawData as unknown as Function
     return { success: true, data }
   } catch (error: any) {
@@ -597,15 +611,21 @@ export async function saveFunction(func: Function): Promise<{ success: boolean; 
 
 export async function getFunctions(tenantId: string): Promise<{ success: boolean; data?: Function[]; error?: string }> {
   try {
+    if (!tenantId) {
+      return { success: false, error: "Tenant ID é obrigatório" }
+    }
+
     const { data: rawData, error } = await supabase
       .from("functions")
       .select("*")
       .eq("tenant_id", tenantId)
       .order("name")
+
     if (error) {
       console.error("Supabase error during getFunctions:", error)
       return { success: false, error: error.message }
     }
+
     const data = rawData as unknown as Function[]
     return { success: true, data }
   } catch (error: any) {
@@ -616,14 +636,29 @@ export async function getFunctions(tenantId: string): Promise<{ success: boolean
 
 export async function deleteFunction(id: string): Promise<{ success: boolean; error?: string }> {
   try {
+    if (!id) {
+      return { success: false, error: "ID da função é obrigatório" }
+    }
+
+    // First, remove any associations with assistants
+    const { error: associationError } = await supabase.from("assistant_functions").delete().eq("function_id", id)
+
+    if (associationError) {
+      console.error("Error deleting function associations:", associationError)
+      // Continue with function deletion even if association deletion fails
+    }
+
+    // Then delete the function itself
     const { error } = await supabase.from("functions").delete().eq("id", id)
 
     if (error) {
+      console.error("Supabase error during deleteFunction:", error)
       return { success: false, error: error.message }
     }
 
     return { success: true }
   } catch (error: any) {
+    console.error("Error deleting function:", error)
     return { success: false, error: error.message || "Unknown error occurred" }
   }
 }
