@@ -1,5 +1,5 @@
 import { getSupabaseClient } from "./supabase"
-import type { Tenant, DashboardMetrics, User, ApiConfiguration, ErpConfiguration, Assistant, AdvancedConfiguration, OnboardingProgress, Address } from "@/types"
+import type { Tenant, DashboardMetrics, User, ApiConfiguration, ErpConfiguration, Assistant, AdvancedConfiguration, OnboardingProgress, Address, Prompt, Function, AssistantWithFunctions } from "@/types"
 // Import the password utilities at the top
 import { hashPassword, verifyPassword, needsRehash, validatePasswordStrength } from "./password-utils"
 
@@ -369,6 +369,129 @@ export async function getAssistants(tenantId: string): Promise<{ success: boolea
   } catch (error: any) {
     console.error("Error getting assistants:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
+  }
+}
+
+export async function getAssistantsWithFunctions(tenantId: string): Promise<{ success: boolean; data?: AssistantWithFunctions[]; error?: string }> {
+  try {
+    const { data, error } = await supabase
+      .from('assistants')
+      .select('*, assistant_functions(function_id)')
+      .eq('tenant_id', tenantId)
+      .order('name');
+    if (error) {
+      console.error('Supabase error during getAssistantsWithFunctions:', error);
+      return { success: false, error: error.message };
+    }
+    const mapped = (data as any[]).map((row) => ({
+      ...(row as any),
+      function_ids: Array.isArray(row.assistant_functions)
+        ? row.assistant_functions.map((af: any) => af.function_id)
+        : [],
+    }));
+    return { success: true, data: mapped as AssistantWithFunctions[] };
+  } catch (error: any) {
+    console.error('Error getting assistants with functions:', error);
+    return { success: false, error: error.message || 'Unknown error occurred' };
+  }
+}
+
+// --- PROMPTS CRUD ---
+export async function savePrompt(prompt: Prompt): Promise<{ success: boolean; data?: Prompt; error?: string }> {
+  try {
+    const id = prompt.id || generateUUID();
+    const { data, error } = await supabase
+      .from('prompts')
+      .upsert({ ...prompt, id }, { onConflict: 'id' })
+      .select()
+      .single();
+    if (error) {
+      console.error('Supabase error during savePrompt:', error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data: data as Prompt };
+  } catch (error: any) {
+    console.error('Error saving prompt:', error);
+    return { success: false, error: error.message || 'Unknown error occurred' };
+  }
+}
+
+export async function getPrompts(tenantId: string): Promise<{ success: boolean; data?: Prompt[]; error?: string }> {
+  try {
+    const { data, error } = await supabase.from('prompts').select('*').eq('tenant_id', tenantId).order('name');
+    if (error) {
+      console.error('Supabase error during getPrompts:', error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data: data as Prompt[] };
+  } catch (error: any) {
+    console.error('Error getting prompts:', error);
+    return { success: false, error: error.message || 'Unknown error occurred' };
+  }
+}
+
+// --- FUNCTIONS CRUD ---
+export async function saveFunction(func: Function): Promise<{ success: boolean; data?: Function; error?: string }> {
+  try {
+    const id = func.id || generateUUID();
+    const { data, error } = await supabase
+      .from('functions')
+      .upsert({ ...func, id }, { onConflict: 'id' })
+      .select()
+      .single();
+    if (error) {
+      console.error('Supabase error during saveFunction:', error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data: data as Function };
+  } catch (error: any) {
+    console.error('Error saving function:', error);
+    return { success: false, error: error.message || 'Unknown error occurred' };
+  }
+}
+
+export async function getFunctions(tenantId: string): Promise<{ success: boolean; data?: Function[]; error?: string }> {
+  try {
+    const { data, error } = await supabase.from('functions').select('*').eq('tenant_id', tenantId).order('name');
+    if (error) {
+      console.error('Supabase error during getFunctions:', error);
+      return { success: false, error: error.message };
+    }
+    return { success: true, data: data as Function[] };
+  } catch (error: any) {
+    console.error('Error getting functions:', error);
+    return { success: false, error: error.message || 'Unknown error occurred' };
+  }
+}
+
+export async function saveAssistantWithFunctions(assistant: Assistant, functionIds: string[]): Promise<{ success: boolean; data?: Assistant; error?: string }> {
+  const result = await saveAssistant(assistant);
+  if (!result.success || !result.data) {
+    return result;
+  }
+
+  const assistantId = result.data.id;
+  try {
+    // Remove existing associations
+    const { error: delErr } = await supabase.from('assistant_functions').delete().eq('assistant_id', assistantId);
+    if (delErr) {
+      console.error('Error deleting old assistant functions:', delErr);
+      return { success: false, error: delErr.message };
+    }
+
+    if (functionIds.length > 0) {
+      const rows = functionIds.map((fid) => ({ assistant_id: assistantId, function_id: fid }));
+      const { error: insErr } = await supabase.from('assistant_functions').insert(rows);
+      if (insErr) {
+        console.error('Error inserting assistant functions:', insErr);
+        return { success: false, error: insErr.message };
+      }
+    }
+
+    return { success: true, data: result.data };
+  } catch (error: any) {
+    console.error('Error saving assistant functions:', error);
+    return { success: false, error: error.message || 'Unknown error occurred' };
   }
 }
 

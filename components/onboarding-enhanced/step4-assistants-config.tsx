@@ -11,16 +11,16 @@ import { Switch } from "@/components/ui/switch"
 import { Slider } from "@/components/ui/slider"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { Assistant, Tenant, PromptTemplate, ErpConfiguration, Prompt, Function, AssistantConfig } from "@/types"
+import type { Assistant, Tenant, PromptTemplate, ErpConfiguration, Prompt, Function, AssistantConfig, AssistantWithFunctions } from "@/types"
 import { getPromptTemplates } from "@/lib/prompt-templates" // Removed fillPromptPlaceholders
 import { Plus, Edit, Trash2, Bot, Settings, FileText, Zap } from "lucide-react"
-import { createPrompt, fetchPromptsForTenant, createFunction, fetchFunctionsForTenant, saveAssistant } from "@/lib/api-utils"
+import { savePrompt, getPrompts, saveFunction as saveFunctionDb, getFunctions, saveAssistantWithFunctions } from "@/lib/database"
 
 interface Step4Props {
-  assistants?: Assistant[]
+  assistants?: AssistantWithFunctions[]
   tenant?: Tenant
   erpConfig?: ErpConfiguration
-  onNext: (assistants: Assistant[]) => void
+  onNext: (assistants: AssistantWithFunctions[]) => void
   onBack: () => void
   saving?: boolean
 }
@@ -34,8 +34,8 @@ export default function Step4AssistantsConfig({
   saving = false,
 }: Step4Props) {
   const [templates, setTemplates] = useState<PromptTemplate[]>([])
-  const [currentAssistants, setCurrentAssistants] = useState<Assistant[]>(assistants)
-  const [editingAssistant, setEditingAssistant] = useState<Assistant | null>(null)
+  const [currentAssistants, setCurrentAssistants] = useState<AssistantWithFunctions[]>(assistants)
+  const [editingAssistant, setEditingAssistant] = useState<AssistantWithFunctions | null>(null)
   const [showAssistantForm, setShowAssistantForm] = useState(false)
   const [loading, setLoading] = useState(true)
 
@@ -107,10 +107,10 @@ export default function Step4AssistantsConfig({
 
       if (tenant?.id) {
         try {
-          const fetchedPrompts = await fetchPromptsForTenant(tenant.id)
-          setAvailablePrompts(fetchedPrompts)
-          const fetchedFunctions = await fetchFunctionsForTenant(tenant.id)
-          setAvailableFunctions(fetchedFunctions)
+          const { data: fetchedPrompts } = await getPrompts(tenant.id)
+          setAvailablePrompts(fetchedPrompts || [])
+          const { data: fetchedFunctions } = await getFunctions(tenant.id)
+          setAvailableFunctions(fetchedFunctions || [])
         } catch (error) {
           console.error("Erro ao buscar prompts ou funções:", error)
           // Tratar erro, talvez exibir uma mensagem para o usuário
@@ -162,7 +162,7 @@ export default function Step4AssistantsConfig({
     setShowAssistantForm(true)
   }
 
-  const handleEditAssistant = (assistant: Assistant) => {
+  const handleEditAssistant = (assistant: AssistantWithFunctions) => {
     setEditingAssistant(assistant)
     // TODO: Ao editar, precisamos carregar o prompt e as funções associadas
     // Isso exigirá uma lógica mais complexa para preencher o formulário
@@ -173,7 +173,7 @@ export default function Step4AssistantsConfig({
       name: assistant.name,
       description: assistant.description || "",
       selectedPromptId: assistant.prompt_id, // Usar o novo prompt_id
-      selectedFunctionIds: [], // TODO: Precisamos buscar as funções associadas ao assistente
+      selectedFunctionIds: assistant.function_ids || [],
       aiConfig: assistant.ai_config,
       isCreatingNewPrompt: false, // Assume que estamos editando um prompt existente
       isCreatingNewFunction: false, // Assume que estamos editando funções existentes
@@ -210,13 +210,17 @@ export default function Step4AssistantsConfig({
         return
       }
       try {
-        const newPrompt = await createPrompt({
+        const { success, data: newPrompt, error } = await savePrompt({
+          id: '',
           tenant_id: tenant.id,
           name: assistantForm.newPrompt.name,
           description: assistantForm.newPrompt.description,
           content: assistantForm.newPrompt.content,
-          prompt_template_id: assistantForm.newPrompt.templateId,
-        });
+          prompt_template_id: assistantForm.newPrompt.templateId || undefined,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as Prompt);
+        if (!success || !newPrompt) throw new Error(error || 'Erro ao criar prompt');
         finalPromptId = newPrompt.id;
       } catch (error) {
         console.error("Erro ao criar prompt:", error);
@@ -240,12 +244,16 @@ export default function Step4AssistantsConfig({
         return
       }
       try {
-        const newFunc = await createFunction({
+        const { success, data: newFunc, error } = await saveFunctionDb({
+          id: '',
           tenant_id: tenant.id,
           name: assistantForm.newFunction.name,
           description: assistantForm.newFunction.description,
-          schema: JSON.parse(assistantForm.newFunction.schema), // Parse JSON string
-        });
+          schema: JSON.parse(assistantForm.newFunction.schema),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as Function);
+        if (!success || !newFunc) throw new Error(error || 'Erro ao criar função');
         finalFunctionIds.push(newFunc.id);
       } catch (error) {
         console.error("Erro ao criar função:", error);
@@ -272,11 +280,13 @@ export default function Step4AssistantsConfig({
 
     // 5. Chamar API para salvar/atualizar o assistente
     try {
-      const savedAssistant = await saveAssistant(assistantData, finalFunctionIds);
+      const { success, data: savedAssistant, error } = await saveAssistantWithFunctions(assistantData, finalFunctionIds);
+      if (!success || !savedAssistant) throw new Error(error || 'Erro ao salvar assistente');
+      const savedWithFuncs: AssistantWithFunctions = { ...savedAssistant, function_ids: finalFunctionIds };
       if (editingAssistant) {
-        setCurrentAssistants((prev) => prev.map((a) => (a.id === editingAssistant.id ? savedAssistant : a)))
+        setCurrentAssistants((prev) => prev.map((a) => (a.id === editingAssistant.id ? savedWithFuncs : a)))
       } else {
-        setCurrentAssistants((prev) => [...prev, savedAssistant])
+        setCurrentAssistants((prev) => [...prev, savedWithFuncs])
       }
       setShowAssistantForm(false)
       resetForm()
@@ -727,8 +737,7 @@ export default function Step4AssistantsConfig({
             {currentAssistants.map((assistant) => {
               const assistantPrompt = availablePrompts.find(p => p.id === assistant.prompt_id);
               const promptName = assistantPrompt ? assistantPrompt.name : "Prompt não encontrado";
-              // TODO: Fetch functions associated with this assistant for display
-              const functionsCount = "N/A"; // Placeholder for now
+              const functionsCount = assistant.function_ids ? assistant.function_ids.length : 0;
 
               return (
                 <Card key={assistant.id} className="card-subtle">

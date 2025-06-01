@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import type { Tenant, User, ApiConfiguration, ErpConfiguration, AdvancedConfiguration, Assistant } from "@/types"
+import type { Tenant, User, ApiConfiguration, ErpConfiguration, AdvancedConfiguration, AssistantWithFunctions } from "@/types"
 import { CheckCircle, User as UserIcon, Building2, Key, Settings, MessageSquare, Zap, Bot } from 'lucide-react'
 
 interface Step7Props {
@@ -11,7 +11,7 @@ interface Step7Props {
   adminUser?: User
   apiConfig?: ApiConfiguration
   erpConfig?: ErpConfiguration
-  assistants?: Assistant[] // Added assistants prop
+  assistants?: AssistantWithFunctions[] // Added assistants prop
   advancedConfig?: AdvancedConfiguration
   onDeploy: () => void
   onBack: () => void

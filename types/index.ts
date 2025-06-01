@@ -144,6 +144,10 @@ export interface Assistant {
   updated_at: string
 }
 
+export interface AssistantWithFunctions extends Assistant {
+  function_ids: string[]
+}
+
 export interface AdvancedConfiguration {
   id: string
   tenant_id: string
