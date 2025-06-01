@@ -31,7 +31,7 @@ interface FunctionManagementProps {
 
 export default function FunctionManagement({ onBack }: FunctionManagementProps) {
   const { user } = useAuth()
-  const tenantId = user?.tenant_id || user?.id // Usar o ID do usuário como tenant_id se não houver tenant_id específico
+  const tenantId = user?.tenant_id
 
   const [functions, setFunctions] = useState<Function[]>([])
   const [loading, setLoading] = useState(true)
@@ -249,6 +249,17 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
   })
 
   // Show loading or error if no tenant
+  if (!tenantId) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-center">
+          <p style={{ color: "#718096" }}>
+            Você não está associado a um tenant. Por favor, entre em contato com o suporte.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
