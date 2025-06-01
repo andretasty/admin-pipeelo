@@ -103,39 +103,20 @@ export class ExternalApiClient {
     return response.json();
   }
 
-  async updateOpenAI(token: string, currentAuthToken?: string) {
+  async updateIntegrationKey(name: "OPEN_AI" | "OPEN_ROUTER", token: string, currentAuthToken?: string) {
     const tokenToUse = currentAuthToken || this.authToken;
     if (!tokenToUse) {
       throw new Error("Authorization token not set");
     }
-    const response = await fetch(`${this.baseUrl}/openai`, {
+    const response = await fetch(`${this.baseUrl}/tenants/integration`, {
       method: "POST",
       headers: this.buildHeaders(tokenToUse),
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({ name, token }),
     });
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(`Failed to update OpenAI key: ${response.status} ${response.statusText} - ${errorBody}`);
-    }
-
-    return response.json();
-  }
-
-  async updateOpenRouter(token: string, currentAuthToken?: string) {
-    const tokenToUse = currentAuthToken || this.authToken;
-    if (!tokenToUse) {
-      throw new Error("Authorization token not set");
-    }
-    const response = await fetch(`${this.baseUrl}/open-router`, {
-      method: "POST",
-      headers: this.buildHeaders(tokenToUse),
-      body: JSON.stringify({ token }),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new Error(`Failed to update OpenRouter key: ${response.status} ${response.statusText} - ${errorBody}`);
+      throw new Error(`Failed to update integration key for ${name}: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
     return response.json();

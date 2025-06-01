@@ -258,10 +258,10 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
 
             if (authToken) {
               if (savedApiConfig.openai_key) {
-                await externalApiClient.updateOpenAI(savedApiConfig.openai_key, authToken);
+                await externalApiClient.updateIntegrationKey("OPEN_AI", savedApiConfig.openai_key, authToken);
               }
               if (savedApiConfig.openrouter_key) {
-                await externalApiClient.updateOpenRouter(savedApiConfig.openrouter_key, authToken);
+                await externalApiClient.updateIntegrationKey("OPEN_ROUTER", savedApiConfig.openrouter_key, authToken);
               }
             }
             break;
