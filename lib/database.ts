@@ -464,8 +464,25 @@ export async function getFunctions(tenantId: string): Promise<{ success: boolean
   }
 }
 
-export async function saveAssistantWithFunctions(assistant: Assistant, functionIds: string[]): Promise<{ success: boolean; data?: Assistant; error?: string }> {
-  const result = await saveAssistant(assistant);
+export async function saveAssistantWithFunctions(
+  assistant: Assistant | AssistantWithFunctions,
+  functionIds: string[],
+): Promise<{ success: boolean; data?: Assistant; error?: string }> {
+  // Sanitize assistant object to avoid passing extra properties like
+  // `function_ids` that are not part of the `assistants` table
+  const sanitizedAssistant: Assistant = {
+    id: assistant.id,
+    tenant_id: assistant.tenant_id,
+    name: assistant.name,
+    description: assistant.description,
+    prompt_id: assistant.prompt_id,
+    ai_config: assistant.ai_config,
+    enabled: assistant.enabled,
+    created_at: assistant.created_at,
+    updated_at: assistant.updated_at,
+  };
+
+  const result = await saveAssistant(sanitizedAssistant);
   if (!result.success || !result.data) {
     return result;
   }

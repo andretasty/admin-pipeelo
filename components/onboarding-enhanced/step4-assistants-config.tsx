@@ -174,7 +174,15 @@ export default function Step4AssistantsConfig({
       description: assistant.description || "",
       selectedPromptId: assistant.prompt_id, // Usar o novo prompt_id
       selectedFunctionIds: assistant.function_ids || [],
-      aiConfig: assistant.ai_config,
+      aiConfig: assistant.ai_config || {
+        provider: "openai",
+        model: "gpt-4",
+        temperature: 0.7,
+        top_p: 1.0,
+        frequency_penalty: 0,
+        response_delay: 0,
+        max_tokens: 2000,
+      },
       isCreatingNewPrompt: false, // Assume que estamos editando um prompt existente
       isCreatingNewFunction: false, // Assume que estamos editando funções existentes
     }))
