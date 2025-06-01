@@ -18,9 +18,9 @@ export default function ProgressIndicatorEnhanced({
         {/* Step Circles and Titles */}
         <div className="grid grid-cols-6 gap-2 mb-6">
           {Array.from({ length: totalSteps }, (_, index) => {
-            const stepNumber = index + 1;
-            const isCompleted = stepNumber < currentStep;
-            const isCurrent = stepNumber === currentStep;
+            const stepNumber = index + 1
+            const isCompleted = stepNumber < currentStep
+            const isCurrent = stepNumber === currentStep
 
             return (
               <div key={stepNumber} className="flex flex-col items-center">
@@ -52,28 +52,26 @@ export default function ProgressIndicatorEnhanced({
         </div>
 
         {/* Connection Lines */}
-        <div className="absolute top-5 left-0 right-0">
-        <div className="flex items-center justify-between px-5">
-          {Array.from({ length: totalSteps - 1 }, (_, index) => {
-            const stepNumber = index + 1
-            const lineWidth = `calc((100% - 80px) / ${totalSteps - 1})` // Adjusted from 70px to 80px for better alignment
+        <div className="absolute top-5 left-[20px] right-[20px]">
+          <div className="flex items-center justify-between">
+            {Array.from({ length: totalSteps - 1 }, (_, index) => {
+              const stepNumber = index + 1
+              const lineWidth = `calc(100% / ${totalSteps - 1})`
 
-            return (
-              <div
-                key={stepNumber}
-                className={`
+              return (
+                <div
+                  key={stepNumber}
+                  className={`
                   h-1 rounded-full transition-all duration-300
                   ${stepNumber < currentStep ? "bg-gradient-to-r from-[#01D5AC] to-[#00C49A]" : "bg-gray-200"}
                 `}
-                style={{
-                  width: lineWidth,
-                  marginLeft: index === 0 ? "20px" : "0",
-                  marginRight: index === totalSteps - 2 ? "20px" : "0",
-                }}
-              />
-            )
-          })}
-        </div>
+                  style={{
+                    width: lineWidth,
+                  }}
+                />
+              )
+            })}
+          </div>
         </div>
       </div>
     </div>
