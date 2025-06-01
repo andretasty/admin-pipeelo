@@ -1,5 +1,5 @@
 import { getSupabaseClient } from "./supabase"
-import type { Tenant, DashboardMetrics, User, ApiConfiguration, ErpConfiguration, Assistant, AdvancedConfiguration, OnboardingProgress, Address, Prompt, Function, AssistantWithFunctions } from "@/types"
+import type { Tenant, DashboardMetrics, User, ApiConfiguration, ErpConfiguration, Assistant, AdvancedConfiguration, OnboardingProgress, Address, Prompt, Function, AssistantWithFunctions, TenantAddressId } from "@/types"
 // Import the password utilities at the top
 import { hashPassword, verifyPassword, needsRehash, validatePasswordStrength } from "./password-utils"
 
@@ -65,12 +65,13 @@ export async function validateERPTemplateExists(templateId: string): Promise<boo
 export async function saveAddress(address: Address): Promise<{ success: boolean; data?: Address; error?: string }> {
   try {
     const id = address.id || generateUUID()
-    const { data, error } = await supabase.from("addresses").upsert({ ...address, id }, { onConflict: "id" }).select().single();
+    const { data: rawData, error } = await supabase.from("addresses").upsert({ ...address, id }, { onConflict: "id" }).select().single();
     if (error) {
       console.error("Supabase error during saveAddress:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Address };
+    const data = rawData as unknown as Address;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error saving address:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -79,12 +80,13 @@ export async function saveAddress(address: Address): Promise<{ success: boolean;
 
 export async function getAddress(id: string): Promise<{ success: boolean; data?: Address; error?: string }> {
   try {
-    const { data, error } = await supabase.from("addresses").select("*").eq("id", id).single();
+    const { data: rawData, error } = await supabase.from("addresses").select("*").eq("id", id).single();
     if (error) {
       console.error("Supabase error during getAddress:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Address };
+    const data = rawData as unknown as Address;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error getting address:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -126,12 +128,13 @@ export async function saveTenant(tenant: Tenant, address?: Address): Promise<{ s
     }
 
     const id = tenant.id || generateUUID();
-    const { data, error } = await supabase.from("tenants").upsert({ ...tenant, id, address_id: addressId }, { onConflict: "id" }).select().single();
+    const { data: rawData, error } = await supabase.from("tenants").upsert({ ...tenant, id, address_id: addressId }, { onConflict: "id" }).select().single();
     if (error) {
       console.error("Supabase error during saveTenant:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Tenant };
+    const data = rawData as unknown as Tenant;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error saving tenant:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -140,12 +143,13 @@ export async function saveTenant(tenant: Tenant, address?: Address): Promise<{ s
 
 export async function getTenant(id: string): Promise<{ success: boolean; data?: Tenant; error?: string }> {
   try {
-    const { data, error } = await supabase.from("tenants").select("*").eq("id", id).single();
+    const { data: rawData, error } = await supabase.from("tenants").select("*").eq("id", id).single();
     if (error) {
       console.error("Supabase error during getTenant:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Tenant };
+    const data = rawData as unknown as Tenant;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error getting tenant:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -170,13 +174,14 @@ export async function getTenants(filters?: any): Promise<{ success: boolean; dat
       query = query.or(`name.ilike.%${filters.search}%,email.ilike.%${filters.search}%`);
     }
 
-    const { data, error } = await query.order("created_at", { ascending: false });
+    const { data: rawData, error } = await query.order("created_at", { ascending: false });
 
     if (error) {
       console.error("Supabase error during getTenants:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Tenant[] };
+    const data = rawData as unknown as Tenant[];
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error getting tenants:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -186,19 +191,47 @@ export async function getTenants(filters?: any): Promise<{ success: boolean; dat
 export async function deleteTenant(id: string): Promise<{ success: boolean; error?: string }> {
   try {
     // First, get the tenant to retrieve the address_id
-    const { data: tenant, error: getTenantError } = await supabase.from("tenants").select("address_id").eq("id", id).single();
+    const { data: rawTenant, error: getTenantError } = await supabase.from("tenants").select("id, address_id").eq("id", id).single();
+    const tenant = rawTenant as unknown as TenantAddressId;
     
     if (getTenantError) {
       console.error("Error getting tenant for deletion:", getTenantError);
       // Continue with deletion even if we can't get the tenant
     }
     
-    const addressId = tenant?.address_id;
+    const addressId: string | undefined = tenant?.address_id !== null ? (tenant?.address_id as string | undefined) : undefined;
     
     // Delete all related records first to satisfy foreign key constraints
+    // Delete all related records first to satisfy foreign key constraints
+    // Delete all related records first to satisfy foreign key constraints
+    // Order matters due to foreign key dependencies
+
+    // 1. Delete assistant_functions (junction table)
+    const { data: assistantIdsToDelete, error: assistantIdsError } = await supabase
+      .from("assistants")
+      .select("id")
+      .eq("tenant_id", id);
+
+    if (assistantIdsError) {
+      console.error("Error fetching assistant IDs for deletion:", assistantIdsError);
+      // Continue, but log the error
+    }
+
+    const idsToDelete = assistantIdsToDelete ? assistantIdsToDelete.map(a => a.id) : [];
+
+    if (idsToDelete.length > 0) {
+      await supabase.from("assistant_functions").delete().in("assistant_id", idsToDelete);
+    }
+
+    // 2. Delete assistants
+    await supabase.from("assistants").delete().eq("tenant_id", id);
+    // 3. Delete prompts
+    await supabase.from("prompts").delete().eq("tenant_id", id);
+    // 4. Delete functions
+    await supabase.from("functions").delete().eq("tenant_id", id);
+    // 5. Delete other tenant-specific configurations
     await supabase.from("api_configurations").delete().eq("tenant_id", id);
     await supabase.from("erp_configurations").delete().eq("tenant_id", id);
-    await supabase.from("assistants").delete().eq("tenant_id", id);
     await supabase.from("advanced_configurations").delete().eq("tenant_id", id);
     await supabase.from("onboarding_progress").delete().eq("tenant_id", id);
     await supabase.from("users").delete().eq("tenant_id", id); // Delete tenant-specific users
@@ -250,12 +283,13 @@ export async function updateTenantPipeeloToken(id: string, token: string): Promi
 export async function saveApiConfiguration(config: ApiConfiguration): Promise<{ success: boolean; data?: ApiConfiguration; error?: string }> {
   try {
     const id = config.id || generateUUID();
-    const { data, error } = await supabase.from("api_configurations").upsert({ ...config, id }, { onConflict: "id" }).select().single();
+    const { data: rawData, error } = await supabase.from("api_configurations").upsert({ ...config, id }, { onConflict: "id" }).select().single();
     if (error) {
       console.error("Supabase error during saveApiConfiguration:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as ApiConfiguration };
+    const data = rawData as unknown as ApiConfiguration;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error saving API configuration:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -264,12 +298,13 @@ export async function saveApiConfiguration(config: ApiConfiguration): Promise<{ 
 
 export async function getApiConfiguration(tenantId: string): Promise<{ success: boolean; data?: ApiConfiguration; error?: string }> {
   try {
-    const { data, error } = await supabase.from("api_configurations").select("*").eq("tenant_id", tenantId).single();
+    const { data: rawData, error } = await supabase.from("api_configurations").select("*").eq("tenant_id", tenantId).single();
     if (error) {
       console.error("Supabase error during getApiConfiguration:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as ApiConfiguration };
+    const data = rawData as unknown as ApiConfiguration;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error getting API configuration:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -295,12 +330,13 @@ export async function saveErpConfiguration(config: ErpConfiguration): Promise<{ 
       updated_at: config.updated_at
     };
     
-    const { data, error } = await supabase.from("erp_configurations").upsert(dataToSave, { onConflict: "id" }).select().single();
+    const { data: rawData, error } = await supabase.from("erp_configurations").upsert(dataToSave, { onConflict: "id" }).select().single();
     if (error) {
       console.error("Supabase error during saveErpConfiguration:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as ErpConfiguration };
+    const data = rawData as unknown as ErpConfiguration;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error saving ERP configuration:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -309,30 +345,30 @@ export async function saveErpConfiguration(config: ErpConfiguration): Promise<{ 
 
 export async function getErpConfiguration(tenantId: string): Promise<{ success: boolean; data?: ErpConfiguration; error?: string }> {
   try {
-    const { data, error } = await supabase.from("erp_configurations").select("*").eq("tenant_id", tenantId).single();
+    const { data: rawData, error } = await supabase.from("erp_configurations").select("*").eq("tenant_id", tenantId).single();
     if (error) {
       console.error("Supabase error during getErpConfiguration:", error);
       return { success: false, error: error.message };
     }
     
     // Map the database column names back to the interface field names
-    if (data) {
+    if (rawData) {
       const mappedData: ErpConfiguration = {
-        id: data.id as string,
-        tenant_id: data.tenant_id as string,
-        template_id: data.erp_template_id as string, // Map erp_template_id to template_id
-        erp_template_name: data.erp_template_name as string | undefined,
-        fields: data.fields as Record<string, string>,
-        enabled_commands: data.enabled_commands as string[],
-        connection_status: data.connection_status as "pending" | "connected" | "failed" | undefined,
-        last_tested: data.last_tested as string | undefined,
-        created_at: data.created_at as string,
-        updated_at: data.updated_at as string
+        id: rawData.id as string,
+        tenant_id: rawData.tenant_id as string,
+        template_id: rawData.erp_template_id as string, // Map erp_template_id to template_id
+        erp_template_name: rawData.erp_template_name as string | undefined,
+        fields: rawData.fields as Record<string, string>,
+        enabled_commands: rawData.enabled_commands as string[],
+        connection_status: rawData.connection_status as "pending" | "connected" | "failed" | undefined,
+        last_tested: rawData.last_tested as string | undefined,
+        created_at: rawData.created_at as string,
+        updated_at: rawData.updated_at as string
       };
       return { success: true, data: mappedData };
     }
     
-    return { success: true, data: data as ErpConfiguration };
+    return { success: true, data: rawData as unknown as ErpConfiguration };
   } catch (error: any) {
     console.error("Error getting ERP configuration:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -346,12 +382,13 @@ export async function saveAssistant(assistant: Assistant): Promise<{ success: bo
     const isValidUUID = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
     const id = assistant.id && isValidUUID(assistant.id) ? assistant.id : generateUUID();
 
-    const { data, error } = await supabase.from("assistants").upsert({ ...assistant, id }, { onConflict: "id" }).select().single();
+    const { data: rawData, error } = await supabase.from("assistants").upsert({ ...assistant, id }, { onConflict: "id" }).select().single();
     if (error) {
       console.error("Supabase error during saveAssistant:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Assistant };
+    const data = rawData as unknown as Assistant;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error saving assistant:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -360,12 +397,13 @@ export async function saveAssistant(assistant: Assistant): Promise<{ success: bo
 
 export async function getAssistants(tenantId: string): Promise<{ success: boolean; data?: Assistant[]; error?: string }> {
   try {
-    const { data, error } = await supabase.from("assistants").select("*").eq("tenant_id", tenantId).order("name");
+    const { data: rawData, error } = await supabase.from("assistants").select("*").eq("tenant_id", tenantId).order("name");
     if (error) {
       console.error("Supabase error during getAssistants:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Assistant[] };
+    const data = rawData as unknown as Assistant[];
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error getting assistants:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -400,7 +438,7 @@ export async function getAssistantsWithFunctions(tenantId: string): Promise<{ su
 export async function savePrompt(prompt: Prompt): Promise<{ success: boolean; data?: Prompt; error?: string }> {
   try {
     const id = prompt.id || generateUUID();
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('prompts')
       .upsert({ ...prompt, id }, { onConflict: 'id' })
       .select()
@@ -409,7 +447,8 @@ export async function savePrompt(prompt: Prompt): Promise<{ success: boolean; da
       console.error('Supabase error during savePrompt:', error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Prompt };
+    const data = rawData as unknown as Prompt;
+    return { success: true, data };
   } catch (error: any) {
     console.error('Error saving prompt:', error);
     return { success: false, error: error.message || 'Unknown error occurred' };
@@ -418,12 +457,13 @@ export async function savePrompt(prompt: Prompt): Promise<{ success: boolean; da
 
 export async function getPrompts(tenantId: string): Promise<{ success: boolean; data?: Prompt[]; error?: string }> {
   try {
-    const { data, error } = await supabase.from('prompts').select('*').eq('tenant_id', tenantId).order('name');
+    const { data: rawData, error } = await supabase.from('prompts').select('*').eq('tenant_id', tenantId).order('name');
     if (error) {
       console.error('Supabase error during getPrompts:', error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Prompt[] };
+    const data = rawData as unknown as Prompt[];
+    return { success: true, data };
   } catch (error: any) {
     console.error('Error getting prompts:', error);
     return { success: false, error: error.message || 'Unknown error occurred' };
@@ -434,7 +474,7 @@ export async function getPrompts(tenantId: string): Promise<{ success: boolean; 
 export async function saveFunction(func: Function): Promise<{ success: boolean; data?: Function; error?: string }> {
   try {
     const id = func.id || generateUUID();
-    const { data, error } = await supabase
+    const { data: rawData, error } = await supabase
       .from('functions')
       .upsert({ ...func, id }, { onConflict: 'id' })
       .select()
@@ -443,7 +483,8 @@ export async function saveFunction(func: Function): Promise<{ success: boolean; 
       console.error('Supabase error during saveFunction:', error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Function };
+    const data = rawData as unknown as Function;
+    return { success: true, data };
   } catch (error: any) {
     console.error('Error saving function:', error);
     return { success: false, error: error.message || 'Unknown error occurred' };
@@ -452,12 +493,13 @@ export async function saveFunction(func: Function): Promise<{ success: boolean; 
 
 export async function getFunctions(tenantId: string): Promise<{ success: boolean; data?: Function[]; error?: string }> {
   try {
-    const { data, error } = await supabase.from('functions').select('*').eq('tenant_id', tenantId).order('name');
+    const { data: rawData, error } = await supabase.from('functions').select('*').eq('tenant_id', tenantId).order('name');
     if (error) {
       console.error('Supabase error during getFunctions:', error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as Function[] };
+    const data = rawData as unknown as Function[];
+    return { success: true, data };
   } catch (error: any) {
     console.error('Error getting functions:', error);
     return { success: false, error: error.message || 'Unknown error occurred' };
@@ -499,12 +541,13 @@ export async function saveAssistantWithFunctions(assistant: Assistant, functionI
 export async function saveAdvancedConfiguration(config: AdvancedConfiguration): Promise<{ success: boolean; data?: AdvancedConfiguration; error?: string }> {
   try {
     const id = config.id || generateUUID();
-    const { data, error } = await supabase.from("advanced_configurations").upsert({ ...config, id }, { onConflict: "id" }).select().single();
+    const { data: rawData, error } = await supabase.from("advanced_configurations").upsert({ ...config, id }, { onConflict: "id" }).select().single();
     if (error) {
       console.error("Supabase error during saveAdvancedConfiguration:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as AdvancedConfiguration };
+    const data = rawData as unknown as AdvancedConfiguration;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error saving advanced configuration:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -513,12 +556,13 @@ export async function saveAdvancedConfiguration(config: AdvancedConfiguration): 
 
 export async function getAdvancedConfiguration(tenantId: string): Promise<{ success: boolean; data?: AdvancedConfiguration; error?: string }> {
   try {
-    const { data, error } = await supabase.from("advanced_configurations").select("*").eq("tenant_id", tenantId).single();
+    const { data: rawData, error } = await supabase.from("advanced_configurations").select("*").eq("tenant_id", tenantId).single();
     if (error) {
       console.error("Supabase error during getAdvancedConfiguration:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as AdvancedConfiguration };
+    const data = rawData as unknown as AdvancedConfiguration;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error getting advanced configuration:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -529,12 +573,13 @@ export async function getAdvancedConfiguration(tenantId: string): Promise<{ succ
 export async function saveOnboardingProgress(progress: OnboardingProgress): Promise<{ success: boolean; data?: OnboardingProgress; error?: string }> {
   try {
     const id = progress.id || generateUUID();
-    const { data, error } = await supabase.from("onboarding_progress").upsert({ ...progress, id }, { onConflict: "id" }).select().single();
+    const { data: rawData, error } = await supabase.from("onboarding_progress").upsert({ ...progress, id }, { onConflict: "id" }).select().single();
     if (error) {
       console.error("Supabase error during saveOnboardingProgress:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as OnboardingProgress };
+    const data = rawData as unknown as OnboardingProgress;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error saving onboarding progress:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -543,12 +588,13 @@ export async function saveOnboardingProgress(progress: OnboardingProgress): Prom
 
 export async function getOnboardingProgress(tenantId: string): Promise<{ success: boolean; data?: OnboardingProgress; error?: string }> {
   try {
-    const { data, error } = await supabase.from("onboarding_progress").select("*").eq("tenant_id", tenantId).single();
+    const { data: rawData, error } = await supabase.from("onboarding_progress").select("*").eq("tenant_id", tenantId).single();
     if (error) {
       console.error("Supabase error during getOnboardingProgress:", error);
       return { success: false, error: error.message };
     }
-    return { success: true, data: data as OnboardingProgress };
+    const data = rawData as unknown as OnboardingProgress;
+    return { success: true, data };
   } catch (error: any) {
     console.error("Error getting onboarding progress:", error);
     return { success: false, error: error.message || "Unknown error occurred" };
@@ -563,24 +609,24 @@ export async function authenticateUser(
   try {
     console.log("Tentando autenticar usuário:", email)
 
-    const { data, error } = await supabase.from("users").select("*").eq("email", email)
+    const { data: rawData, error } = await supabase.from("users").select("*").eq("email", email)
 
     if (error) {
       console.error("Erro na consulta de autenticação Supabase:", error)
       return { success: false, error: "Erro interno do sistema ao autenticar." }
     }
 
-    if (!data || data.length === 0) {
+    if (!rawData || rawData.length === 0) {
       console.log("Nenhum usuário encontrado com esse email:", email)
       return { success: false, error: "Credenciais inválidas." }
     }
 
-    if (data.length > 1) {
+    if (rawData.length > 1) {
       console.warn("Múltiplos usuários encontrados com o mesmo email:", email)
       return { success: false, error: "Erro de configuração: Múltiplos usuários encontrados." }
     }
 
-    const user = data[0] as User
+    const user = rawData[0] as unknown as User
 
     // Verify password using bcrypt comparison
     const isPasswordValid = await verifyPassword(password, user.password_hash as string)
@@ -661,13 +707,14 @@ export async function updateUserPassword(id: string, password: string): Promise<
 
 export async function getUsers(): Promise<{ success: boolean; data?: User[]; error?: string }> {
   try {
-    const { data, error } = await supabase.from("users").select("*").order("created_at", { ascending: false })
+    const { data: rawData, error } = await supabase.from("users").select("*").order("created_at", { ascending: false })
 
     if (error) {
       return { success: false, error: error.message }
     }
 
-    return { success: true, data: data as User[] }
+    const data = rawData as unknown as User[];
+    return { success: true, data };
   } catch (error: any) {
     return { success: false, error: error.message || "Unknown error occurred" }
   }

@@ -195,3 +195,5 @@ export interface DashboardMetrics {
   success_rate: number
   failed_deployments: number
 }
+
+export type TenantAddressId = { id: string; address_id: string | null; };
