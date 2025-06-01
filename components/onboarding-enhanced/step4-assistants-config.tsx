@@ -397,7 +397,7 @@ export default function Step4AssistantsConfig({
                         <Label>Descrição do Prompt (opcional)</Label>
                         <Textarea
                           value={assistantForm.newPrompt.description}
-                          onChange={(e) => setAssistantForm((prev) => ({ ...prev.newPrompt, description: e.target.value } as any))}
+                          onChange={(e) => setAssistantForm((prev) => ({ ...prev, newPrompt: { ...prev.newPrompt, description: e.target.value } }))}
                           placeholder="Descreva a finalidade deste prompt"
                         />
                       </div>
@@ -433,7 +433,7 @@ export default function Step4AssistantsConfig({
                         <Label>Conteúdo do Prompt</Label>
                         <Textarea
                           value={assistantForm.newPrompt.content}
-                          onChange={(e) => setAssistantForm((prev) => ({ ...prev.newPrompt, content: e.target.value } as any))}
+                          onChange={(e) => setAssistantForm((prev) => ({ ...prev, newPrompt: { ...prev.newPrompt, content: e.target.value } }))}
                           placeholder="Insira o conteúdo do prompt aqui..."
                           className="min-h-[150px]"
                         />
