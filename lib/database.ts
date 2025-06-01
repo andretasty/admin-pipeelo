@@ -263,7 +263,7 @@ export async function deleteTenant(id: string): Promise<{ success: boolean; erro
     // 3. Delete prompts
     await supabase.from("prompts").delete().eq("tenant_id", id)
     // 4. Delete functions
-    await supabase.from("functions").delete().eq("tenant_id", id)
+    await supabase.from("functions").delete().eq("id", id)
     // 5. Delete other tenant-specific configurations
     await supabase.from("api_configurations").delete().eq("tenant_id", id)
     await supabase.from("erp_configurations").delete().eq("tenant_id", id)
@@ -582,7 +582,6 @@ export async function saveFunction(func: Function): Promise<{ success: boolean; 
     // Prepare data for database insertion
     const functionData = {
       id,
-      tenant_id: func.tenant_id || null,
       name: func.name,
       description: func.description,
       schema: func.schema, // This will be stored as JSONB
@@ -612,12 +611,6 @@ export async function saveFunction(func: Function): Promise<{ success: boolean; 
 export async function getFunctions(tenantId?: string): Promise<{ success: boolean; data?: Function[]; error?: string }> {
   try {
     let query = supabase.from("functions").select("*")
-
-    if (tenantId) {
-      query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
-    } else {
-      query = query.is("tenant_id", null)
-    }
 
     const { data: rawData, error } = await query.order("name")
 

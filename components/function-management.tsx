@@ -96,7 +96,6 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
     try {
       const functionData = {
         ...formData,
-        tenant_id: tenantId ?? null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       } as Function

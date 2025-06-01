@@ -21,7 +21,6 @@ export async function fetchPromptsForTenant(tenantId: string): Promise<Prompt[]>
   return [
     {
       id: "existing_prompt_1",
-      tenant_id: tenantId,
       name: "Prompt Existente de Vendas",
       description: "Um prompt de vendas genérico.",
       content: "Você é um assistente de vendas. Seu objetivo é...",
@@ -30,7 +29,6 @@ export async function fetchPromptsForTenant(tenantId: string): Promise<Prompt[]>
     },
     {
       id: "existing_prompt_2",
-      tenant_id: tenantId,
       name: "Prompt Existente de Suporte",
       description: "Um prompt de suporte ao cliente.",
       content: "Você é um assistente de suporte. Ajude o cliente com...",
@@ -61,7 +59,6 @@ export async function fetchFunctionsForTenant(tenantId: string): Promise<Functio
   return [
     {
       id: "existing_func_1",
-      tenant_id: tenantId,
       name: "get_customer_info",
       description: "Obtém informações do cliente pelo ID.",
       schema: {
@@ -75,7 +72,6 @@ export async function fetchFunctionsForTenant(tenantId: string): Promise<Functio
     },
     {
       id: "existing_func_2",
-      tenant_id: tenantId,
       name: "place_order",
       description: "Realiza um pedido para o cliente.",
       schema: {

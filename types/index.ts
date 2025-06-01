@@ -112,7 +112,7 @@ export interface PromptTemplate {
 // New Prompt interface
 export interface Prompt {
   id: string
-  tenant_id: string
+  tenant_id?: string
   name: string
   description?: string
   content: string
@@ -124,7 +124,6 @@ export interface Prompt {
 // New Function interface
 export interface Function {
   id: string
-  tenant_id?: string
   name: string
   description?: string
   schema: Record<string, any> // Using Record<string, any> for JSONB schema
