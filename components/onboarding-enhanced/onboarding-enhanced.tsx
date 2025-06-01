@@ -157,40 +157,51 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
         // Log start of tenant creation
         setLogMessages((logs) => [...logs, "Iniciando criação da conta no sistema externo..."]);
 
-        // Create tenant account in external API
-        const creationResponse = await externalApiClient.createTenantAccount({
-          tenant: {
-            ...newTenantData,
-            document: newTenantData.document.replace(/\D/g, ""),
-            phone_number: newTenantData.phone_number.replace(/\D/g, ""),
-            address: {
-              ...newAddressData,
-              postal_code: newAddressData.postal_code.replace(/\D/g, ""),
-            },
-          },
-          user: {
-            ...newUserData,
-            password: newUserData.password_hash,
-            document: newUserData.document.replace(/\D/g, ""),
-          },
-          gateway: "CONTA_AZUL",
-        });
-        const token = creationResponse?.token || creationResponse?.permanent_token;
-        if (token) {
-          setAuthToken(token);
-          externalApiClient.setAuthToken(token);
-        }
-        setLogMessages((logs) => [...logs, "Conta criada com sucesso no sistema externo."]); 
+        let pipeeloToken = tenant?.pipeelo_token;
 
-        // Authenticate and obtain permanent token
-        setLogMessages((logs) => [...logs, "Obtendo token permanente..."]);
-        const loginResp = await externalApiClient.login(newUserData.email, newUserData.password_hash);
-        const tempToken = (loginResp.token as string).split("|")[1] || loginResp.token;
-        const permanentResp = await externalApiClient.getPermanentToken(tempToken);
-        const pipeeloToken = permanentResp.token as string;
-        setAuthToken(pipeeloToken);
-        externalApiClient.setAuthToken(pipeeloToken);
-        setLogMessages((logs) => [...logs, "Token permanente obtido."]);
+        if (!pipeeloToken) {
+          // Log start of tenant creation
+          setLogMessages((logs) => [...logs, "Iniciando criação da conta no sistema externo..."]);
+
+          // Create tenant account in external API
+          const creationResponse = await externalApiClient.createTenantAccount({
+            tenant: {
+              ...newTenantData,
+              document: newTenantData.document.replace(/\D/g, ""),
+              phone_number: newTenantData.phone_number.replace(/\D/g, ""),
+              address: {
+                ...newAddressData,
+                postal_code: newAddressData.postal_code.replace(/\D/g, ""),
+              },
+            },
+            user: {
+              ...newUserData,
+              password: newUserData.password_hash,
+              document: newUserData.document.replace(/\D/g, ""),
+            },
+            gateway: "CONTA_AZUL",
+          });
+          const token = creationResponse?.token || creationResponse?.permanent_token;
+          if (token) {
+            setAuthToken(token);
+            externalApiClient.setAuthToken(token);
+          }
+          setLogMessages((logs) => [...logs, "Conta criada com sucesso no sistema externo."]); 
+
+          // Authenticate and obtain permanent token
+          setLogMessages((logs) => [...logs, "Obtendo token permanente..."]);
+          const loginResp = await externalApiClient.login(newUserData.email, newUserData.password_hash);
+          const tempToken = (loginResp.token as string).split("|")[1] || loginResp.token;
+          const permanentResp = await externalApiClient.getPermanentToken(tempToken);
+          pipeeloToken = permanentResp.token as string;
+          setAuthToken(pipeeloToken);
+          externalApiClient.setAuthToken(pipeeloToken);
+          setLogMessages((logs) => [...logs, "Token permanente obtido."]);
+        } else {
+          setLogMessages((logs) => [...logs, "Pipeelo token existente, pulando criação de conta externa."]);
+          setAuthToken(pipeeloToken);
+          externalApiClient.setAuthToken(pipeeloToken);
+        }
 
         // Save Address
         const { success: addressSuccess, data: savedAddress, error: addressError } = await saveAddress(newAddressData);
@@ -270,6 +281,28 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
             const { success: erpConfigSuccess, data: savedErpConfig, error: erpConfigError } = await saveErpConfiguration(erpConfigToSave);
             if (!erpConfigSuccess || !savedErpConfig) throw new Error(erpConfigError || "Erro ao salvar configuração de ERP.");
             setERPConfig(savedErpConfig);
+
+            if (authToken) {
+              const erpName = savedErpConfig.erp_template_name;
+              const fields = savedErpConfig.fields;
+              let mainToken = "";
+              const extraData: Record<string, string> = {};
+
+              // Determine the main token and populate extraData
+              for (const key in fields) {
+                if (key === "api_key" || key === "token") { // Assuming 'api_key' or 'token' is the main token field
+                  mainToken = fields[key];
+                } else {
+                  extraData[key] = fields[key];
+                }
+              }
+
+              if (erpName && mainToken) {
+                await externalApiClient.updateErpIntegration(erpName, mainToken, extraData, authToken);
+              } else {
+                console.warn("ERP name or main token not found for external API update.");
+              }
+            }
             break;
           case 4:
             // Assistants are an array, need to handle individually or as a batch

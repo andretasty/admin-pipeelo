@@ -159,4 +159,23 @@ export class ExternalApiClient {
 
     return response.json();
   }
+
+  async updateErpIntegration(name: string, token: string, extraData: Record<string, string>, currentAuthToken?: string) {
+    const tokenToUse = currentAuthToken || this.authToken;
+    if (!tokenToUse) {
+      throw new Error("Authorization token not set");
+    }
+    const response = await fetch(`${this.baseUrl}/tenants/integration`, {
+      method: "POST",
+      headers: this.buildHeaders(tokenToUse),
+      body: JSON.stringify({ name, token, extra_data: extraData }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to update ERP integration for ${name}: ${response.status} ${response.statusText} - ${errorBody}`);
+    }
+
+    return response.json();
+  }
 }
