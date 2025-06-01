@@ -114,9 +114,7 @@ export class ExternalApiClient {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
-        `Failed to update OpenAI key: ${response.status} ${response.statusText} - ${errorBody}`
-      );
+      throw new Error(`Failed to update OpenAI key: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
     return response.json();
@@ -134,9 +132,7 @@ export class ExternalApiClient {
 
     if (!response.ok) {
       const errorBody = await response.text();
-      throw new Error(
-        `Failed to update OpenRouter key: ${response.status} ${response.statusText} - ${errorBody}`
-      );
+      throw new Error(`Failed to update OpenRouter key: ${response.status} ${response.statusText} - ${errorBody}`);
     }
 
     return response.json();
