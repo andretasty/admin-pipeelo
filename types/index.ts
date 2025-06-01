@@ -16,6 +16,7 @@ export interface Tenant {
   phone_number: string
   email: string
   website?: string
+  pipeelo_token?: string
   sector?: string // Made nullable based on previous feedback
   address_id?: string // Link to Address table
   created_at: string
