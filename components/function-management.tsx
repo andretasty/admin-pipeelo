@@ -13,7 +13,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { getFunctions, createFunction, updateFunction, deleteFunction } from "@/lib/function-database"
+import {
+  getFunctions,
+  saveFunction as createFunction,
+  saveFunction as updateFunction,
+  deleteFunction,
+} from "@/lib/database"
 import { Plus, Trash2, Edit, Tag, Eye, Code } from "lucide-react"
 import type { Function } from "@/types"
 import { useToast } from "@/hooks/use-toast"
