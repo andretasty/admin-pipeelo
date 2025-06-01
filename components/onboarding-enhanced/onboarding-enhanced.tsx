@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import type { Tenant, User, Address, ApiConfiguration, ErpConfiguration, Assistant, AdvancedConfiguration, OnboardingProgress } from "@/types"
 import {
   saveAddress,
@@ -60,8 +60,10 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
   const [tenantId, setTenantId] = useState<string | undefined>(editingTenantId)
   const [error, setError] = useState<string | null>(null)
   const [logMessages, setLogMessages] = useState<string[]>([])
+  const [authToken, setAuthToken] = useState<string | null>(null)
   
-  const externalApiClient = new ExternalApiClient()
+  const externalApiClientRef = useRef(new ExternalApiClient())
+  const externalApiClient = externalApiClientRef.current
 
   // Step data states
   const [tenant, setTenant] = useState<Tenant | undefined>(undefined)
@@ -122,6 +124,12 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
     fetchEditingData()
   }, [editingTenantId])
 
+  useEffect(() => {
+    if (authToken) {
+      externalApiClient.setAuthToken(authToken)
+    }
+  }, [authToken])
+
   const handleStepComplete = async (step: number, stepData: any) => {
     setSaving(true)
     setError(null)
@@ -141,7 +149,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
         setLogMessages((logs) => [...logs, "Iniciando criação da conta no sistema externo..."]);
 
         // Create tenant account in external API
-        await externalApiClient.createTenantAccount({
+        const creationResponse = await externalApiClient.createTenantAccount({
           tenant: {
             ...newTenantData,
             document: newTenantData.document.replace(/\D/g, ""),
@@ -158,7 +166,12 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
           },
           gateway: "CONTA_AZUL",
         });
-        setLogMessages((logs) => [...logs, "Conta criada com sucesso no sistema externo."]);
+        const token = creationResponse?.token || creationResponse?.permanent_token;
+        if (token) {
+          setAuthToken(token);
+          externalApiClient.setAuthToken(token);
+        }
+        setLogMessages((logs) => [...logs, "Conta criada com sucesso no sistema externo."]); 
 
         // Save Address
         const { success: addressSuccess, data: savedAddress, error: addressError } = await saveAddress(newAddressData);
@@ -215,6 +228,15 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
             const { success: apiConfigSuccess, data: savedApiConfig, error: apiConfigError } = await saveApiConfiguration(apiConfigToSave);
             if (!apiConfigSuccess || !savedApiConfig) throw new Error(apiConfigError || "Erro ao salvar configuração de API.");
             setApiConfig(savedApiConfig);
+
+            if (authToken) {
+              if (savedApiConfig.openai_key) {
+                await externalApiClient.updateOpenAI(savedApiConfig.openai_key);
+              }
+              if (savedApiConfig.openrouter_key) {
+                await externalApiClient.updateOpenRouter(savedApiConfig.openrouter_key);
+              }
+            }
             break;
           case 3:
             const erpConfigToSave: ErpConfiguration = { ...stepData, tenant_id: currentTenantId } as ErpConfiguration;
