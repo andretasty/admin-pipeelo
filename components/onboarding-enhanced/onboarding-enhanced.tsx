@@ -156,7 +156,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
             password: newUserData.password_hash,
             document: newUserData.document.replace(/\D/g, ""),
           },
-          gateway: "STRIPE",
+          gateway: "CONTA_AZUL",
         });
         setLogMessages((logs) => [...logs, "Conta criada com sucesso no sistema externo."]);
 
