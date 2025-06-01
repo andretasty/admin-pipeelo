@@ -23,10 +23,12 @@ import {
   Target,
   Zap,
   MessageSquare,
+  Code,
 } from "lucide-react"
 import Image from "next/image"
 import UserManagement from "./user-management"
 import PromptManagement from "./prompt-management"
+import FunctionManagement from "./function-management"
 
 interface DashboardEnhancedProps {
   onCreateClient: () => void
@@ -42,7 +44,7 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [sectorFilter, setSectorFilter] = useState<string>("all")
   const { logout } = useAuth()
-  const [currentView, setCurrentView] = useState<"dashboard" | "users" | "prompts">("dashboard")
+  const [currentView, setCurrentView] = useState<"dashboard" | "users" | "prompts" | "functions">("dashboard")
 
   useEffect(() => {
     fetchData()
@@ -169,7 +171,9 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
                     ? "Gerenciamento de Usuários"
                     : currentView === "prompts"
                       ? "Gerenciamento de Prompts"
-                      : "Dashboard"}
+                      : currentView === "functions"
+                        ? "Gerenciamento de Funções"
+                        : "Dashboard"}
                 </h1>
               </div>
             </div>
@@ -182,6 +186,15 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
               >
                 <MessageSquare size={16} />
                 <span>Prompts</span>
+              </Button>
+              <Button
+                onClick={() => setCurrentView("functions")}
+                variant="outline"
+                className="flex items-center space-x-2 h-10 px-4 rounded-lg border-gray-200 hover:bg-gray-50 transition-all duration-200"
+                style={{ color: "#718096" }}
+              >
+                <Code size={16} />
+                <span>Funções</span>
               </Button>
               <Button
                 onClick={() =>
@@ -218,6 +231,8 @@ export default function DashboardEnhanced({ onCreateClient, onEditClient }: Dash
           <UserManagement onBack={() => setCurrentView("dashboard")} />
         ) : currentView === "prompts" ? (
           <PromptManagement onBack={() => setCurrentView("dashboard")} />
+        ) : currentView === "functions" ? (
+          <FunctionManagement onBack={() => setCurrentView("dashboard")} />
         ) : (
           <>
             {/* Metrics Cards */}
