@@ -495,7 +495,7 @@ export default function Step4AssistantsConfig({
                       <Label>Nome da Função</Label>
                       <Input
                         value={assistantForm.newFunction.name}
-                        onChange={(e) => setAssistantForm((prev) => ({ ...prev.newFunction, name: e.target.value } as any))}
+                        onChange={(e) => setAssistantForm((prev) => ({ ...prev, newFunction: { ...prev.newFunction, name: e.target.value } }))}
                         placeholder="Ex: get_customer_info"
                       />
                     </div>
@@ -503,7 +503,7 @@ export default function Step4AssistantsConfig({
                       <Label>Descrição da Função (opcional)</Label>
                       <Textarea
                         value={assistantForm.newFunction.description}
-                        onChange={(e) => setAssistantForm((prev) => ({ ...prev.newFunction, description: e.target.value } as any))}
+                        onChange={(e) => setAssistantForm((prev) => ({ ...prev, newFunction: { ...prev.newFunction, description: e.target.value } }))}
                         placeholder="Descreva o que esta função faz"
                       />
                     </div>
@@ -511,7 +511,7 @@ export default function Step4AssistantsConfig({
                       <Label>Schema da Função (JSON)</Label>
                       <Textarea
                         value={assistantForm.newFunction.schema}
-                        onChange={(e) => setAssistantForm((prev) => ({ ...prev.newFunction, schema: e.target.value } as any))}
+                        onChange={(e) => setAssistantForm((prev) => ({ ...prev, newFunction: { ...prev.newFunction, schema: e.target.value } }))}
                         placeholder={`{\n  "type": "object",\n  "properties": {\n    "param1": { "type": "string" }\n  }\n}`}
                         className="min-h-[150px] font-mono"
                       />

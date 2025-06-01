@@ -141,7 +141,7 @@ export class ExternalApiClient {
   }
 
   async getPermanentToken(tempToken: string) {
-    const url = this.baseUrl + "/auth/permanent-token";
+    const url = this.baseUrl + "/permanent-token";
     const headers = {
       ...this.buildHeaders(),
       "Authorization": `Bearer ${tempToken}`,
