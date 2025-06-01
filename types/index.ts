@@ -35,8 +35,8 @@ export interface User {
 }
 
 export interface ApiConfiguration {
-  id: string
-  tenant_id: string
+  id?: string
+  tenant_id?: string
   openai_key?: string
   openrouter_key?: string
   api_tests?: {
@@ -44,8 +44,8 @@ export interface ApiConfiguration {
     openrouter_status?: "pending" | "success" | "failed"
     last_tested?: string
   }
-  created_at: string
-  updated_at: string
+  created_at?: string
+  updated_at?: string
 }
 
 export interface ERPCommand {
