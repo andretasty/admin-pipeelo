@@ -102,6 +102,35 @@ export class ExternalApiClient {
     return response.json();
   }
 
+  async login(email: string, password: string) {
+    const response = await fetch(`${this.baseUrl}/login`, {
+      method: "POST",
+      headers: this.buildHeaders(),
+      body: JSON.stringify({ email, password }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to login: ${response.status} ${response.statusText} - ${errorBody}`);
+    }
+
+    return response.json();
+  }
+
+  async getPermanentToken(token: string) {
+    const response = await fetch(`${this.baseUrl}/permanent-token`, {
+      method: "POST",
+      headers: { ...this.buildHeaders(), Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error(`Failed to obtain permanent token: ${response.status} ${response.statusText} - ${errorBody}`);
+    }
+
+    return response.json();
+  }
+
   async updateOpenAI(token: string) {
     if (!this.authToken) {
       throw new Error("Authorization token not set");

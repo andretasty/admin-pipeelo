@@ -15,9 +15,10 @@ interface Step2Props {
   onNext: (apiConfig: ApiConfiguration) => void
   onBack: () => void
   saving?: boolean
+  authToken?: string | null
 }
 
-export default function Step2ApiConfig({ apiConfig, onNext, onBack, saving = false }: Step2Props) {
+export default function Step2ApiConfig({ apiConfig, onNext, onBack, saving = false, authToken }: Step2Props) {
   const [config, setConfig] = useState<ApiConfiguration>({
     openai_key: apiConfig?.openai_key || "",
     openrouter_key: apiConfig?.openrouter_key || "",
@@ -29,15 +30,15 @@ export default function Step2ApiConfig({ apiConfig, onNext, onBack, saving = fal
     e.preventDefault()
     setIsSaving(true)
 
-    const authToken = getAuthToken()
-    if (!authToken) {
+    const token = authToken || getAuthToken()
+    if (!token) {
       console.error("Authentication token not available.")
       setIsSaving(false)
       return
     }
 
     const apiClient = new ExternalApiClient()
-    apiClient.setAuthToken(authToken)
+    apiClient.setAuthToken(token)
 
     try {
       if (config.openai_key) {

@@ -23,6 +23,7 @@ import {
 } from "@/lib/database"
 import { getSupabaseClient } from "@/lib/supabase"
 import { ExternalApiClient } from "@/lib/external-api"
+import { setAuthToken as storeAuthToken } from "@/lib/storage"
 
 const supabase = getSupabaseClient()
 
@@ -181,6 +182,9 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
         const permanentResp = await externalApiClient.getPermanentToken(tempToken);
         const pipeeloToken = permanentResp.token as string;
         setLogMessages((logs) => [...logs, "Token permanente obtido."]);
+        storeAuthToken(pipeeloToken);
+        setAuthToken(pipeeloToken);
+        externalApiClient.setAuthToken(pipeeloToken);
 
         // Save Address
         const { success: addressSuccess, data: savedAddress, error: addressError } = await saveAddress(newAddressData);
@@ -469,6 +473,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
               onNext={(data) => handleStepComplete(2, data)}
               onBack={handleBack}
               saving={saving}
+              authToken={authToken}
             />
           )}
 
