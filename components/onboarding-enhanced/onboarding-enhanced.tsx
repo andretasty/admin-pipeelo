@@ -70,6 +70,14 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
   const [tenant, setTenant] = useState<Tenant | undefined>(undefined)
   const [address, setAddress] = useState<Address | undefined>(undefined)
   const [user, setUser] = useState<User | undefined>(undefined)
+
+  // Load pipeelo_token when tenant is set
+  useEffect(() => {
+    if (tenant?.pipeelo_token) {
+      setAuthToken(tenant.pipeelo_token)
+      externalApiClient.setAuthToken(tenant.pipeelo_token)
+    }
+  }, [tenant])
   const [apiConfig, setApiConfig] = useState<ApiConfiguration | undefined>(undefined)
   const [erpConfig, setERPConfig] = useState<ErpConfiguration | undefined>(undefined)
   const [assistants, setAssistants] = useState<Assistant[]>([])
@@ -94,7 +102,7 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
 
           const { data: fetchedUser } = await supabase.from("users").select("*").eq("tenant_id", editingTenantId).eq("role", "admin").single();
           if (fetchedUser) {
-            setUser(fetchedUser as User);
+            setUser(fetchedUser as unknown as User); // Explicitly cast to unknown first
           }
 
           const { data: fetchedApiConfig } = await getApiConfiguration(editingTenantId)
@@ -180,6 +188,8 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
         const tempToken = (loginResp.token as string).split("|")[1] || loginResp.token;
         const permanentResp = await externalApiClient.getPermanentToken(tempToken);
         const pipeeloToken = permanentResp.token as string;
+        setAuthToken(pipeeloToken);
+        externalApiClient.setAuthToken(pipeeloToken);
         setLogMessages((logs) => [...logs, "Token permanente obtido."]);
 
         // Save Address
@@ -199,11 +209,13 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
         currentTenantId = savedTenant.id;
         setTenantId(savedTenant.id); // Set tenantId for subsequent steps
 
-        // Save permanent token in tenant record
-        const { success: tokenSuccess, error: tokenError } = await updateTenantPipeeloToken(savedTenant.id, pipeeloToken);
-        if (!tokenSuccess) {
-          throw new Error(tokenError || "Erro ao salvar token permanente.");
-        }
+      // Save permanent token in tenant record
+      const { success: tokenSuccess, error: tokenError } = await updateTenantPipeeloToken(savedTenant.id, pipeeloToken);
+      if (!tokenSuccess) {
+        throw new Error(tokenError || "Erro ao salvar token permanente.");
+      }
+      // Update local tenant state with the new token
+      setTenant(prev => prev ? {...prev, pipeelo_token: pipeeloToken} : prev);
 
         // Create User (admin user for the tenant)
         const userToCreate: User = { ...newUserData, tenant_id: savedTenant.id } as User;
@@ -246,10 +258,10 @@ export default function OnboardingEnhanced({ onComplete, onCancel, editingTenant
 
             if (authToken) {
               if (savedApiConfig.openai_key) {
-                await externalApiClient.updateOpenAI(savedApiConfig.openai_key);
+                await externalApiClient.updateOpenAI(savedApiConfig.openai_key, authToken);
               }
               if (savedApiConfig.openrouter_key) {
-                await externalApiClient.updateOpenRouter(savedApiConfig.openrouter_key);
+                await externalApiClient.updateOpenRouter(savedApiConfig.openrouter_key, authToken);
               }
             }
             break;

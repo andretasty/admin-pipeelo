@@ -1,4 +1,5 @@
 export interface Address {
+  id: string
   street: string
   number: string
   neighborhood: string
@@ -29,14 +30,15 @@ export interface User {
   email: string
   password_hash: string
   role: string
+  document: string // Added document field
   tenant_id?: string // Optional, for tenant-specific users
   created_at: string
   updated_at: string
 }
 
 export interface ApiConfiguration {
-  id?: string
-  tenant_id?: string
+  id: string
+  tenant_id: string
   openai_key?: string
   openrouter_key?: string
   api_tests?: {
@@ -44,8 +46,8 @@ export interface ApiConfiguration {
     openrouter_status?: "pending" | "success" | "failed"
     last_tested?: string
   }
-  created_at?: string
-  updated_at?: string
+  created_at: string
+  updated_at: string
 }
 
 export interface ERPCommand {

@@ -66,14 +66,15 @@ export class ExternalApiClient {
     return tokenElement ? tokenElement.getAttribute('content') : null;
   }
 
-  private buildHeaders(): HeadersInit {
+  private buildHeaders(token?: string): HeadersInit {
     const headers: HeadersInit = {
       Accept: "application/json",
       "Content-Type": "application/json",
     };
 
-    if (this.authToken) {
-      headers["Authorization"] = `Bearer ${this.authToken}`;
+    const tokenToUse = token || this.authToken;
+    if (tokenToUse) {
+      headers["Authorization"] = `Bearer ${tokenToUse}`;
     }
 
     const csrfToken = this.getCsrfToken();
@@ -102,13 +103,14 @@ export class ExternalApiClient {
     return response.json();
   }
 
-  async updateOpenAI(token: string) {
-    if (!this.authToken) {
+  async updateOpenAI(token: string, currentAuthToken?: string) {
+    const tokenToUse = currentAuthToken || this.authToken;
+    if (!tokenToUse) {
       throw new Error("Authorization token not set");
     }
     const response = await fetch(`${this.baseUrl}/openai`, {
       method: "POST",
-      headers: this.buildHeaders(),
+      headers: this.buildHeaders(tokenToUse),
       body: JSON.stringify({ token }),
     });
 
@@ -120,19 +122,58 @@ export class ExternalApiClient {
     return response.json();
   }
 
-  async updateOpenRouter(token: string) {
-    if (!this.authToken) {
+  async updateOpenRouter(token: string, currentAuthToken?: string) {
+    const tokenToUse = currentAuthToken || this.authToken;
+    if (!tokenToUse) {
       throw new Error("Authorization token not set");
     }
     const response = await fetch(`${this.baseUrl}/open-router`, {
       method: "POST",
-      headers: this.buildHeaders(),
+      headers: this.buildHeaders(tokenToUse),
       body: JSON.stringify({ token }),
     });
 
     if (!response.ok) {
       const errorBody = await response.text();
       throw new Error(`Failed to update OpenRouter key: ${response.status} ${response.statusText} - ${errorBody}`);
+    }
+
+    return response.json();
+  }
+
+  async login(email: string, password_hash: string) {
+    const url = this.baseUrl + "/auth/login";
+    const headers = this.buildHeaders();
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify({ email, password: password_hash }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error("Failed to login: " + response.status + " " + response.statusText + " - " + errorBody);
+    }
+
+    return response.json();
+  }
+
+  async getPermanentToken(tempToken: string) {
+    const url = this.baseUrl + "/auth/permanent-token";
+    const headers = {
+      ...this.buildHeaders(),
+      "Authorization": `Bearer ${tempToken}`,
+    };
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: headers,
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new Error("Failed to get permanent token: " + response.status + " " + response.statusText + " - " + errorBody);
     }
 
     return response.json();

@@ -3,16 +3,16 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import type { Tenant, AdminUser, ApiConfig, ERPConfig, PromptConfig, AdvancedConfig } from "@/types"
-import { CheckCircle, User, Building2, Key, Settings, MessageSquare, Zap } from 'lucide-react'
+import type { Tenant, User, ApiConfiguration, ErpConfiguration, PromptConfig, AdvancedConfiguration, Assistant } from "@/types"
+import { CheckCircle, User as UserIcon, Building2, Key, Settings, MessageSquare, Zap, Bot } from 'lucide-react'
 
 interface Step7Props {
   tenant?: Tenant
-  adminUser?: AdminUser
-  apiConfig?: ApiConfig
-  erpConfig?: ERPConfig
-  promptConfig?: PromptConfig
-  advancedConfig?: AdvancedConfig
+  adminUser?: User
+  apiConfig?: ApiConfiguration
+  erpConfig?: ErpConfiguration
+  assistants?: Assistant[] // Added assistants prop
+  advancedConfig?: AdvancedConfiguration
   onDeploy: () => void
   onBack: () => void
   saving?: boolean
@@ -23,7 +23,7 @@ export default function Step7ReviewDeploy({
   adminUser, 
   apiConfig, 
   erpConfig, 
-  promptConfig, 
+  assistants, // Destructure assistants
   advancedConfig,
   onDeploy, 
   onBack, 
@@ -68,7 +68,7 @@ export default function Step7ReviewDeploy({
           <Card className="card-subtle">
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center space-x-2 text-base">
-                <User size={20} style={{ color: "#01D5AC" }} />
+                <UserIcon size={20} style={{ color: "#01D5AC" }} />
                 <span>Usuário Admin</span>
                 <CheckCircle size={16} className="text-green-500" />
               </CardTitle>
@@ -77,7 +77,7 @@ export default function Step7ReviewDeploy({
               <div className="space-y-2 text-sm">
                 <div><strong>Nome:</strong> {adminUser?.name}</div>
                 <div><strong>Email:</strong> {adminUser?.email}</div>
-                <div><strong>CPF:</strong> {adminUser?.document}</div>
+                <div><strong>CPF:</strong> {adminUser?.document_number}</div>
               </div>
             </CardContent>
           </Card>
@@ -106,6 +106,26 @@ export default function Step7ReviewDeploy({
               </div>
             </CardContent>
           </Card>
+
+          {/* Assistants Config */}
+          {assistants && assistants.length > 0 && (
+            <Card className="card-subtle">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center space-x-2 text-base">
+                  <Bot size={20} style={{ color: "#01D5AC" }} />
+                  <span>Assistentes Configurados</span>
+                  <CheckCircle size={16} className="text-green-500" />
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="space-y-2 text-sm">
+                  {assistants.map((assistant, index) => (
+                    <div key={index}><strong>{assistant.name}:</strong> {assistant.description}</div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -121,27 +141,8 @@ export default function Step7ReviewDeploy({
               </CardHeader>
               <CardContent className="pt-0">
                 <div className="space-y-2 text-sm">
-                  <div><strong>Sistema:</strong> {erpConfig.template_name}</div>
+                  <div><strong>Sistema:</strong> {erpConfig.erp_template_name}</div>
                   <div><strong>Funções:</strong> {erpConfig.enabled_commands.length} ativadas</div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Prompt Config */}
-          {promptConfig && (
-            <Card className="card-subtle">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center space-x-2 text-base">
-                  <MessageSquare size={20} style={{ color: "#01D5AC" }} />
-                  <span>Prompt Configurado</span>
-                  <CheckCircle size={16} className="text-green-500" />
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <div className="space-y-2 text-sm">
-                  <div><strong>Template:</strong> {promptConfig.template_name}</div>
-                  <div><strong>Modelo:</strong> {promptConfig.assistant_config.model}</div>
                 </div>
               </CardContent>
             </Card>
