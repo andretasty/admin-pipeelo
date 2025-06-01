@@ -55,11 +55,20 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
     setError(null)
 
     try {
-      const data = await getFunctions()
-      setFunctions(data)
+      // Assumindo que temos um tenant_id disponível - você pode precisar ajustar isso
+      const tenantId = "your-tenant-id" // TODO: Obter o tenant_id do contexto ou props
+      const result = await getFunctions(tenantId)
+
+      if (result.success && result.data) {
+        setFunctions(result.data)
+      } else {
+        setError(result.error || "Erro ao carregar funções")
+        setFunctions([])
+      }
     } catch (err) {
       setError("Erro ao carregar funções")
       console.error("Error fetching functions:", err)
+      setFunctions([])
     }
 
     setLoading(false)
@@ -81,13 +90,31 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
 
     setSaving(true)
     try {
-      await createFunction(formData as Function)
-      setShowCreateDialog(false)
-      resetForm()
-      fetchFunctions()
-      toast({
-        title: "Função criada com sucesso!",
-      })
+      const tenantId = "your-tenant-id" // TODO: Obter o tenant_id do contexto ou props
+      const functionData = {
+        ...formData,
+        tenant_id: tenantId,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      } as Function
+
+      const result = await createFunction(functionData)
+
+      if (result.success) {
+        setShowCreateDialog(false)
+        resetForm()
+        fetchFunctions()
+        toast({
+          title: "Função criada com sucesso!",
+        })
+      } else {
+        setFormErrors({ submit: result.error || "Erro ao criar função" })
+        toast({
+          title: "Erro ao criar função!",
+          description: result.error || "Por favor, tente novamente.",
+          variant: "destructive",
+        })
+      }
     } catch (err) {
       setFormErrors({ submit: "Erro ao criar função" })
       console.error("Error creating function:", err)
@@ -105,14 +132,30 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
 
     setSaving(true)
     try {
-      await updateFunction({ ...selectedFunction, ...formData } as Function)
-      setShowEditDialog(false)
-      setSelectedFunction(null)
-      resetForm()
-      fetchFunctions()
-      toast({
-        title: "Função atualizada com sucesso!",
-      })
+      const updatedFunction = {
+        ...selectedFunction,
+        ...formData,
+        updated_at: new Date().toISOString(),
+      } as Function
+
+      const result = await updateFunction(updatedFunction)
+
+      if (result.success) {
+        setShowEditDialog(false)
+        setSelectedFunction(null)
+        resetForm()
+        fetchFunctions()
+        toast({
+          title: "Função atualizada com sucesso!",
+        })
+      } else {
+        setFormErrors({ submit: result.error || "Erro ao atualizar função" })
+        toast({
+          title: "Erro ao atualizar função!",
+          description: result.error || "Por favor, tente novamente.",
+          variant: "destructive",
+        })
+      }
     } catch (err) {
       setFormErrors({ submit: "Erro ao atualizar função" })
       console.error("Error updating function:", err)
@@ -128,11 +171,21 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
   const handleDeleteFunction = async (functionId: string, functionName: string) => {
     if (confirm(`Tem certeza que deseja excluir a função "${functionName}"?`)) {
       try {
-        await deleteFunction(functionId)
-        fetchFunctions()
-        toast({
-          title: "Função excluída com sucesso!",
-        })
+        const result = await deleteFunction(functionId)
+
+        if (result.success) {
+          fetchFunctions()
+          toast({
+            title: "Função excluída com sucesso!",
+          })
+        } else {
+          setError(result.error || "Erro ao excluir função")
+          toast({
+            title: "Erro ao excluir função!",
+            description: result.error || "Por favor, tente novamente.",
+            variant: "destructive",
+          })
+        }
       } catch (err) {
         setError("Erro ao excluir função")
         console.error("Error deleting function:", err)
