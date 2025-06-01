@@ -582,7 +582,7 @@ export async function saveFunction(func: Function): Promise<{ success: boolean; 
     // Prepare data for database insertion
     const functionData = {
       id,
-      tenant_id: func.tenant_id,
+      tenant_id: func.tenant_id || null,
       name: func.name,
       description: func.description,
       schema: func.schema, // This will be stored as JSONB
@@ -609,17 +609,17 @@ export async function saveFunction(func: Function): Promise<{ success: boolean; 
   }
 }
 
-export async function getFunctions(tenantId: string): Promise<{ success: boolean; data?: Function[]; error?: string }> {
+export async function getFunctions(tenantId?: string): Promise<{ success: boolean; data?: Function[]; error?: string }> {
   try {
-    if (!tenantId) {
-      return { success: false, error: "Tenant ID é obrigatório" }
+    let query = supabase.from("functions").select("*")
+
+    if (tenantId) {
+      query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+    } else {
+      query = query.is("tenant_id", null)
     }
 
-    const { data: rawData, error } = await supabase
-      .from("functions")
-      .select("*")
-      .eq("tenant_id", tenantId)
-      .order("name")
+    const { data: rawData, error } = await query.order("name")
 
     if (error) {
       console.error("Supabase error during getFunctions:", error)

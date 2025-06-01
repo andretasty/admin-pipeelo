@@ -58,12 +58,6 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
     setLoading(true)
     setError(null)
 
-    if (!tenantId) {
-      setError("Usuário não autenticado")
-      setLoading(false)
-      return
-    }
-
     try {
       const result = await getFunctions(tenantId)
 
@@ -94,10 +88,7 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
   }
 
   const handleCreateFunction = async () => {
-    if (!validateForm() || !tenantId) {
-      if (!tenantId) {
-        setFormErrors({ submit: "Usuário não autenticado" })
-      }
+    if (!validateForm()) {
       return
     }
 
@@ -105,7 +96,7 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
     try {
       const functionData = {
         ...formData,
-        tenant_id: tenantId,
+        tenant_id: tenantId ?? null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       } as Function
@@ -140,10 +131,7 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
   }
 
   const handleUpdateFunction = async () => {
-    if (!validateForm() || !tenantId) {
-      if (!tenantId) {
-        setFormErrors({ submit: "Usuário não autenticado" })
-      }
+    if (!validateForm()) {
       return
     }
 
@@ -248,18 +236,7 @@ export default function FunctionManagement({ onBack }: FunctionManagementProps) 
     )
   })
 
-  // Show loading or error if no tenant
-  if (!tenantId) {
-    return (
-      <div className="flex items-center justify-center py-16">
-        <div className="text-center">
-          <p style={{ color: "#718096" }}>
-            Você não está associado a um tenant. Por favor, entre em contato com o suporte.
-          </p>
-        </div>
-      </div>
-    )
-  }
+
 
   return (
     <div className="space-y-6">
